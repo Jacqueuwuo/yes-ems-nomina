@@ -1,0 +1,766 @@
+(function () {
+  "use strict";
+
+  /* ============ Helpers ============ */
+  function pad(n) { return String(n).padStart(2, "0"); }
+  function ymd(d) { return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()); }
+  function round2(n) { return Math.round(n * 100) / 100; }
+  function escapeHtml(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+  var moneyFmt = new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" });
+  function fmtMoney(n) { return moneyFmt.format(n || 0); }
+  function fmtHours(n) {
+    n = n || 0;
+    return n.toLocaleString("es-MX", { minimumFractionDigits: 0, maximumFractionDigits: 2 }) + " h";
+  }
+  function fmtDateTime(d) { return d.toLocaleString("es-MX", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }); }
+  function toLocalInputValue(d) {
+    return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()) + "T" + pad(d.getHours()) + ":" + pad(d.getMinutes());
+  }
+
+  function quincenaFor(date) {
+    var y = date.getFullYear(), m = date.getMonth(), day = date.getDate();
+    if (day <= 15) return { inicio: new Date(y, m, 1), fin: new Date(y, m, 15), half: 1 };
+    var lastDay = new Date(y, m + 1, 0).getDate();
+    return { inicio: new Date(y, m, 16), fin: new Date(y, m, lastDay), half: 2 };
+  }
+  function periodIdFor(q) { return q.inicio.getFullYear() + "-" + pad(q.inicio.getMonth() + 1) + "-" + q.half; }
+  function fmtRange(q) {
+    var a = q.inicio.toLocaleDateString("es-MX", { day: "numeric", month: "short" });
+    var b = q.fin.toLocaleDateString("es-MX", { day: "numeric", month: "short", year: "numeric" });
+    return a + " – " + b;
+  }
+
+  /* ============ API client ============ */
+  function api(method, path, body) {
+    return fetch(path, {
+      method: method,
+      headers: body ? { "Content-Type": "application/json" } : {},
+      body: body ? JSON.stringify(body) : undefined,
+    }).then(function (r) {
+      if (r.status === 401) {
+        window.location.href = "/login";
+        throw new Error("No autorizado");
+      }
+      if (r.status === 204) return null;
+      return r.json().then(function (data) {
+        if (!r.ok) throw new Error((data && data.error) || "Ocurrió un error.");
+        return data;
+      });
+    });
+  }
+
+  /* ============ State ============ */
+  var workers = [];
+  var periodAnchor = new Date();
+  var currentPeriodData = null;
+  var currentTurnos = [];
+  var adminView = "nomina"; // nomina | asistencia
+  var deleteConfirmId = null;
+  var turnoDeleteConfirmId = null;
+  var saveTimers = {};
+  var currentClosed = false;
+  var asistenciaSubtotals = {};
+
+  /* ============ DOM refs ============ */
+  var el = {
+    workerList: document.getElementById("workerList"),
+    btnAddSide: document.getElementById("btnAddSide"),
+    btnLogout: document.getElementById("btnLogout"),
+    sideUser: document.getElementById("sideUser"),
+    periodLabel: document.getElementById("periodLabel"),
+    periodSub: document.getElementById("periodSub"),
+    btnPrev: document.getElementById("btnPrev"),
+    btnNext: document.getElementById("btnNext"),
+    statusPill: document.getElementById("statusPill"),
+    statusText: document.getElementById("statusText"),
+    saveStatus: document.getElementById("saveStatus"),
+    statLabel1: document.getElementById("statLabel1"),
+    statLabel2: document.getElementById("statLabel2"),
+    statLabel3: document.getElementById("statLabel3"),
+    statTrabajadores: document.getElementById("statTrabajadores"),
+    statHoras: document.getElementById("statHoras"),
+    statTotal: document.getElementById("statTotal"),
+    tableWrap: document.getElementById("tableWrap"),
+    modalBackdrop: document.getElementById("modalBackdrop"),
+    modal: document.getElementById("modal"),
+    btnPrint: document.getElementById("btnPrint"),
+    btnExport: document.getElementById("btnExport"),
+    btnExportHistorial: document.getElementById("btnExportHistorial"),
+    btnQr: document.getElementById("btnQr"),
+    tabNomina: document.getElementById("tabNomina"),
+    tabAsistencia: document.getElementById("tabAsistencia"),
+    toastStack: document.getElementById("toastStack"),
+  };
+
+  /* ============ Toasts ============ */
+  function showToast(msg, type) {
+    var t = document.createElement("div");
+    t.className = "toast" + (type ? " " + type : "");
+    t.textContent = msg;
+    el.toastStack.appendChild(t);
+    setTimeout(function () { t.remove(); }, 3800);
+  }
+
+  /* ============ Sidebar ============ */
+  function renderSidebar() {
+    var active = workers.filter(function (w) { return w.activo; });
+    if (active.length === 0) {
+      el.workerList.innerHTML = '<div class="side-empty">Aún no hay trabajadores registrados.</div>';
+      return;
+    }
+    el.workerList.innerHTML = active.map(function (w) {
+      return '<button class="worker-chip" type="button" data-open-worker="' + w.id + '">' +
+        '<span class="wc-top"><span class="wc-name">' + escapeHtml(w.nombre) + '</span>' +
+        '<span class="wc-rate">' + fmtMoney(w.tarifaNormal) + '/h</span></span>' +
+        (w.puesto ? '<span class="wc-puesto">' + escapeHtml(w.puesto) + '</span>' : '') +
+        '</button>';
+    }).join("");
+  }
+  el.workerList.addEventListener("click", function (e) {
+    var btn = e.target.closest("[data-open-worker]");
+    if (btn) openWorkerModal(Number(btn.getAttribute("data-open-worker")));
+  });
+  el.btnAddSide.addEventListener("click", function () { openWorkerModal(null); });
+
+  /* ============ Session / logout ============ */
+  api("GET", "/api/session").then(function (data) {
+    el.sideUser.textContent = data.usuario ? "Sesión: " + data.usuario : "";
+  }).catch(function () {});
+  el.btnLogout.addEventListener("click", function () {
+    api("POST", "/api/logout").then(function () { window.location.href = "/login"; });
+  });
+
+  /* ============ View tabs ============ */
+  function setView(view) {
+    adminView = view;
+    el.tabNomina.classList.toggle("active", view === "nomina");
+    el.tabAsistencia.classList.toggle("active", view === "asistencia");
+    el.btnPrint.hidden = view !== "nomina";
+    el.btnExport.hidden = view !== "nomina";
+    if (view === "nomina") {
+      el.statLabel1.textContent = "Trabajadores";
+      el.statLabel2.textContent = "Horas registradas";
+      el.statLabel3.textContent = "Total a pagar";
+      renderTable(currentPeriodData);
+      stopAsistenciaPolling();
+    } else {
+      el.statLabel1.textContent = "Turnos registrados";
+      el.statLabel2.textContent = "Horas totales";
+      el.statLabel3.textContent = "Turnos abiertos";
+      renderAsistencia();
+      refreshTurnos();
+      startAsistenciaPolling();
+    }
+  }
+  el.tabNomina.addEventListener("click", function () { setView("nomina"); });
+  el.tabAsistencia.addEventListener("click", function () { setView("asistencia"); });
+
+  /* ============ Period nav ============ */
+  function renderTopbarLabels() {
+    var q = quincenaFor(periodAnchor);
+    el.periodLabel.textContent = fmtRange(q);
+    el.periodSub.textContent = "Quincena " + q.half + (q.half === 1 ? " (1–15)" : " (16–fin de mes)");
+  }
+  el.btnPrev.addEventListener("click", function () {
+    var q = quincenaFor(periodAnchor);
+    var d = new Date(q.inicio); d.setDate(d.getDate() - 1);
+    periodAnchor = d;
+    loadPeriod();
+  });
+  el.btnNext.addEventListener("click", function () {
+    var q = quincenaFor(periodAnchor);
+    var d = new Date(q.fin); d.setDate(d.getDate() + 1);
+    periodAnchor = d;
+    loadPeriod();
+  });
+
+  function updateStatusPill(closed) {
+    currentClosed = closed;
+    el.statusPill.className = "status-pill " + (closed ? "closed" : "open");
+    el.statusText.textContent = closed ? "Pagada" : "Abierta";
+  }
+  el.statusPill.addEventListener("click", function () {
+    var q = quincenaFor(periodAnchor);
+    var pid = periodIdFor(q);
+    var next = !currentClosed;
+    updateStatusPill(next);
+    setInputsDisabled(next);
+    api("PUT", "/api/periods/" + pid + "/cerrada", { cerrada: next }).catch(function () {
+      showToast("No se pudo actualizar el estado de la quincena.", "error");
+      updateStatusPill(!next);
+      setInputsDisabled(!next);
+    });
+  });
+  function setInputsDisabled(disabled) {
+    document.querySelectorAll(".hours-input").forEach(function (inp) { inp.disabled = disabled; });
+  }
+
+  /* ============ Nómina table ============ */
+  function displayWorkersFor(entries) {
+    var active = workers.filter(function (w) { return w.activo; });
+    var ids = {};
+    active.forEach(function (w) { ids[w.id] = true; });
+    var extra = [];
+    if (entries) {
+      Object.keys(entries).forEach(function (wid) {
+        if (!ids[wid]) {
+          var w = workers.find(function (x) { return String(x.id) === String(wid); });
+          if (w) extra.push(w);
+        }
+      });
+    }
+    return active.concat(extra);
+  }
+
+  function renderTable(periodData) {
+    if (adminView !== "nomina") return;
+    var list = displayWorkersFor(periodData && periodData.entries);
+    if (list.length === 0) {
+      el.tableWrap.innerHTML =
+        '<div class="empty-state">' +
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>' +
+        "<h2>Aún no hay trabajadores</h2>" +
+        "<p>Agrega a tu primer instructor, coordinador o administrativo para empezar a registrar sus horas de esta quincena.</p>" +
+        '<button class="btn btn-primary" type="button" id="btnEmptyAdd">Agregar primer trabajador</button>' +
+        "</div>";
+      var btn = document.getElementById("btnEmptyAdd");
+      if (btn) btn.addEventListener("click", function () { openWorkerModal(null); });
+      return;
+    }
+
+    var entries = (periodData && periodData.entries) || {};
+    var closed = !!(periodData && periodData.cerrada);
+
+    var rows = list.map(function (w) {
+      var e = entries[w.id] || {};
+      var hn = e.horasNormales || 0, he = e.horasExtra || 0;
+      var inactive = !w.activo;
+      return '<tr data-worker="' + w.id + '" data-tn="' + w.tarifaNormal + '" data-te="' + w.tarifaExtra + '" class="' + (inactive ? "inactive" : "") + '">' +
+        '<td class="cell-name"><div class="name">' + escapeHtml(w.nombre) + (inactive ? ' <span style="font-weight:400;color:var(--ink-soft);">(baja)</span>' : '') + '</div>' +
+        (w.puesto ? '<div class="puesto">' + escapeHtml(w.puesto) + '</div>' : '') + '</td>' +
+        '<td class="cell-num"><input class="hours-input" type="number" min="0" step="0.5" data-field="horasNormales" value="' + hn + '" ' + (closed ? "disabled" : "") + ' aria-label="Horas normales de ' + escapeHtml(w.nombre) + '"></td>' +
+        '<td class="cell-num rate">' + fmtMoney(w.tarifaNormal) + '</td>' +
+        '<td class="cell-num"><input class="hours-input" type="number" min="0" step="0.5" data-field="horasExtra" value="' + he + '" ' + (closed ? "disabled" : "") + ' aria-label="Horas extra de ' + escapeHtml(w.nombre) + '"></td>' +
+        '<td class="cell-num rate">' + fmtMoney(w.tarifaExtra) + '</td>' +
+        '<td class="cell-num total"><span class="row-total">' + fmtMoney(hn * w.tarifaNormal + he * w.tarifaExtra) + '</span></td>' +
+        '<td class="cell-actions">' + actionsHtml(w.id, false) + '</td>' +
+        '</tr>';
+    }).join("");
+
+    el.tableWrap.innerHTML =
+      '<div class="table-scroll"><table id="payTable">' +
+      '<thead><tr>' +
+      '<th>Trabajador</th><th class="cell-num">Horas normales</th><th class="cell-num">Tarifa/h</th>' +
+      '<th class="cell-num">Horas extra</th><th class="cell-num">Tarifa extra/h</th><th class="cell-num">Total</th><th></th>' +
+      '</tr></thead>' +
+      '<tbody>' + rows + '</tbody>' +
+      '<tfoot><tr>' +
+      '<td colspan="5" class="foot-label">Total de la quincena</td>' +
+      '<td class="cell-num" id="footTotal">$0.00</td><td></td>' +
+      '</tr></tfoot>' +
+      '</table></div>';
+
+    recomputeAll();
+  }
+
+  function actionsHtml(workerId, confirming) {
+    if (confirming) {
+      return '<span class="confirm-text">¿Eliminar?</span>' +
+        '<button class="confirm-btn" type="button" data-action="cancel-delete">No</button>' +
+        '<button class="confirm-btn yes" type="button" data-action="confirm-delete">Sí</button>';
+    }
+    return '<button class="icon-btn" type="button" data-action="edit" title="Editar" aria-label="Editar trabajador">' +
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>' +
+      '</button>' +
+      '<button class="icon-btn danger" type="button" data-action="delete" title="Eliminar" aria-label="Eliminar trabajador">' +
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6"/></svg>' +
+      '</button>';
+  }
+
+  function updateRowTotal(row) {
+    var hn = parseFloat(row.querySelector('[data-field="horasNormales"]').value) || 0;
+    var he = parseFloat(row.querySelector('[data-field="horasExtra"]').value) || 0;
+    var tn = parseFloat(row.dataset.tn) || 0;
+    var te = parseFloat(row.dataset.te) || 0;
+    var total = hn * tn + he * te;
+    var totalEl = row.querySelector(".row-total");
+    if (totalEl) totalEl.textContent = fmtMoney(total);
+    return { hn: hn, he: he, total: total };
+  }
+
+  function recomputeAll() {
+    var rows = document.querySelectorAll("#payTable tbody tr");
+    var totalHoras = 0, totalPago = 0;
+    rows.forEach(function (row) {
+      var r = updateRowTotal(row);
+      totalHoras += r.hn + r.he;
+      totalPago += r.total;
+    });
+    var footTotal = document.getElementById("footTotal");
+    if (footTotal) footTotal.textContent = fmtMoney(totalPago);
+    el.statTrabajadores.textContent = rows.length;
+    el.statHoras.textContent = fmtHours(totalHoras);
+    el.statTotal.textContent = fmtMoney(totalPago);
+  }
+
+  function scheduleSave(workerId) {
+    var q = quincenaFor(periodAnchor);
+    var pid = periodIdFor(q);
+    clearTimeout(saveTimers[workerId]);
+    el.saveStatus.textContent = "Guardando…";
+    el.saveStatus.classList.remove("err");
+    saveTimers[workerId] = setTimeout(function () {
+      var row = document.querySelector('tr[data-worker="' + CSS.escape(String(workerId)) + '"]');
+      if (!row) return;
+      var hn = parseFloat(row.querySelector('[data-field="horasNormales"]').value) || 0;
+      var he = parseFloat(row.querySelector('[data-field="horasExtra"]').value) || 0;
+      api("PUT", "/api/periods/" + pid + "/entries/" + workerId, { horasNormales: hn, horasExtra: he })
+        .then(function () {
+          el.saveStatus.textContent = "Guardado";
+          setTimeout(function () { if (el.saveStatus.textContent === "Guardado") el.saveStatus.textContent = ""; }, 1800);
+        })
+        .catch(function () {
+          el.saveStatus.textContent = "Error al guardar";
+          el.saveStatus.classList.add("err");
+          showToast("No se pudieron guardar las horas. Verifica tu conexión e inténtalo de nuevo.", "error");
+        });
+    }, 500);
+  }
+
+  el.tableWrap.addEventListener("input", function (e) {
+    var input = e.target.closest(".hours-input");
+    if (!input) return;
+    var v = parseFloat(input.value);
+    if (v < 0) input.value = 0;
+    var row = input.closest("tr");
+    updateRowTotal(row);
+    recomputeAll();
+    scheduleSave(row.dataset.worker);
+  });
+
+  el.tableWrap.addEventListener("click", function (e) {
+    if (adminView === "nomina") {
+      var btn = e.target.closest("[data-action]");
+      if (!btn) return;
+      var row = btn.closest("tr");
+      var workerId = row ? Number(row.dataset.worker) : null;
+      var action = btn.dataset.action;
+      if (action === "edit") {
+        openWorkerModal(workerId);
+      } else if (action === "delete") {
+        deleteConfirmId = workerId;
+        row.querySelector(".cell-actions").innerHTML = actionsHtml(workerId, true);
+      } else if (action === "cancel-delete") {
+        deleteConfirmId = null;
+        row.querySelector(".cell-actions").innerHTML = actionsHtml(workerId, false);
+      } else if (action === "confirm-delete") {
+        deleteConfirmId = null;
+        api("DELETE", "/api/workers/" + workerId).then(function () {
+          showToast("Trabajador dado de baja.", "ok");
+          loadWorkers();
+        }).catch(function () {
+          showToast("No se pudo eliminar al trabajador.", "error");
+          row.querySelector(".cell-actions").innerHTML = actionsHtml(workerId, false);
+        });
+      }
+    } else {
+      handleAsistenciaClick(e);
+    }
+  });
+
+  /* ============ Loaders ============ */
+  function loadWorkers() {
+    return api("GET", "/api/workers").then(function (data) {
+      workers = data;
+      renderSidebar();
+      if (adminView === "nomina") renderTable(currentPeriodData);
+      else renderAsistencia();
+    }).catch(function () {
+      showToast("No se pudo cargar la lista de trabajadores.", "error");
+    });
+  }
+
+  function loadPeriod() {
+    renderTopbarLabels();
+    var q = quincenaFor(periodAnchor);
+    var pid = periodIdFor(q);
+    var startStr = ymd(q.inicio), endStr = ymd(q.fin);
+
+    return Promise.all([
+      api("GET", "/api/periods/" + pid),
+      api("GET", "/api/turnos?start=" + startStr + "&end=" + endStr),
+    ]).then(function (res) {
+      currentPeriodData = res[0];
+      currentTurnos = res[1];
+      updateStatusPill(!!currentPeriodData.cerrada);
+      if (adminView === "nomina") renderTable(currentPeriodData);
+      else renderAsistencia();
+    }).catch(function () {
+      showToast("No se pudo cargar esta quincena.", "error");
+    });
+  }
+
+  // La asistencia la registran los propios trabajadores desde su celular
+  // (checador por QR), en cualquier momento -- no solo cuando este panel
+  // hace su primera carga. Por eso, cada vez que se entra a la pestaña
+  // "Asistencia" se vuelve a pedir la lista de turnos al servidor (en vez
+  // de reusar la que ya estaba en memoria), y mientras esa pestaña sigue
+  // abierta se refresca sola cada 15 segundos para reflejar entradas o
+  // salidas nuevas sin que alguien tenga que recargar la página.
+  var asistenciaPollTimer = null;
+  function refreshTurnos(opts) {
+    opts = opts || {};
+    var q = quincenaFor(periodAnchor);
+    var startStr = ymd(q.inicio), endStr = ymd(q.fin);
+    return api("GET", "/api/turnos?start=" + startStr + "&end=" + endStr).then(function (data) {
+      currentTurnos = data;
+      if (adminView === "asistencia") renderAsistencia();
+    }).catch(function () {
+      if (!opts.silent) showToast("No se pudo actualizar la asistencia.", "error");
+    });
+  }
+  function startAsistenciaPolling() {
+    stopAsistenciaPolling();
+    asistenciaPollTimer = setInterval(function () {
+      if (adminView === "asistencia" && document.visibilityState === "visible") {
+        refreshTurnos({ silent: true });
+      }
+    }, 15000);
+  }
+  function stopAsistenciaPolling() {
+    if (asistenciaPollTimer) { clearInterval(asistenciaPollTimer); asistenciaPollTimer = null; }
+  }
+
+  /* ============ Asistencia (attendance) view ============ */
+  function groupTurnosByWorker(turnos) {
+    var byWorker = {};
+    turnos.forEach(function (t) { (byWorker[t.workerId] = byWorker[t.workerId] || []).push(t); });
+    return byWorker;
+  }
+  function turnoActionsHtml(turnoId, confirming) {
+    if (confirming) {
+      return '<span class="confirm-text">¿Eliminar?</span>' +
+        '<button class="confirm-btn" type="button" data-taction="cancel-delete">No</button>' +
+        '<button class="confirm-btn yes" type="button" data-taction="confirm-delete">Sí</button>';
+    }
+    return '<button class="icon-btn" type="button" data-taction="edit" title="Editar turno" aria-label="Editar turno">' +
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>' +
+      '</button>' +
+      '<button class="icon-btn danger" type="button" data-taction="delete" title="Eliminar turno" aria-label="Eliminar turno">' +
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6"/></svg>' +
+      '</button>';
+  }
+
+  function renderAsistencia() {
+    if (adminView !== "asistencia") return;
+    var byWorker = groupTurnosByWorker(currentTurnos);
+    var activeWorkers = workers.filter(function (w) { return w.activo; });
+    var ids = {}; activeWorkers.forEach(function (w) { ids[w.id] = true; });
+    var extraWorkers = Object.keys(byWorker).filter(function (id) { return !ids[id]; })
+      .map(function (id) { return workers.find(function (w) { return String(w.id) === String(id); }); }).filter(Boolean);
+    var list = activeWorkers.concat(extraWorkers);
+
+    el.tableWrap.innerHTML = '<div class="table-toolbar">' +
+      '<button class="btn btn-ghost" type="button" id="btnAddTurno">+ Registrar turno manual</button>' +
+      '<button class="btn btn-primary" type="button" id="btnApplyAsistencia">Aplicar horas a nómina</button>' +
+      '</div><div id="asistenciaTableHolder"></div>';
+    document.getElementById("btnAddTurno").addEventListener("click", function () { openTurnoModal(null, null); });
+    document.getElementById("btnApplyAsistencia").addEventListener("click", applyAsistenciaToNomina);
+
+    var holder = document.getElementById("asistenciaTableHolder");
+
+    if (currentTurnos.length === 0) {
+      holder.innerHTML =
+        '<div class="empty-state">' +
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>' +
+        '<h2>Sin registros en esta quincena</h2>' +
+        '<p>Comparte el código QR con tus trabajadores para que marquen su entrada y salida, o registra un turno manualmente.</p>' +
+        '</div>';
+      el.statTrabajadores.textContent = 0;
+      el.statHoras.textContent = fmtHours(0);
+      el.statTotal.textContent = 0;
+      return;
+    }
+
+    var totalHoras = 0, abiertos = 0, totalTurnos = 0;
+    asistenciaSubtotals = {};
+    var rowsHtml = list.map(function (w) {
+      var turnos = (byWorker[w.id] || []).slice().sort(function (a, b) { return a.entrada < b.entrada ? -1 : (a.entrada > b.entrada ? 1 : 0); });
+      if (turnos.length === 0) return "";
+      var subtotal = 0;
+      var body = turnos.map(function (t) {
+        totalTurnos++;
+        var open = !t.salida;
+        if (open) abiertos++;
+        if (t.horas != null) subtotal += t.horas;
+        var entradaD = new Date(t.entrada);
+        var salidaD = t.salida ? new Date(t.salida) : null;
+        return '<tr data-turno="' + t.id + '" data-worker="' + w.id + '">' +
+          '<td class="cell-name"><div class="name">' + escapeHtml(w.nombre) + '</div></td>' +
+          '<td>' + fmtDateTime(entradaD) + '</td>' +
+          '<td>' + (salidaD ? fmtDateTime(salidaD) : '<span class="badge-open">Turno abierto</span>') + '</td>' +
+          '<td class="cell-num">' + (t.horas != null ? fmtHours(t.horas) : "—") + '</td>' +
+          '<td class="cell-actions">' + turnoActionsHtml(t.id, false) + '</td>' +
+          '</tr>';
+      }).join("");
+      totalHoras += subtotal;
+      asistenciaSubtotals[w.id] = subtotal;
+      return body + '<tr class="subtotal-row"><td colspan="3">Subtotal — ' + escapeHtml(w.nombre) + '</td><td class="cell-num">' + fmtHours(subtotal) + '</td><td></td></tr>';
+    }).join("");
+
+    holder.innerHTML =
+      '<div class="table-scroll"><table id="asistenciaTable">' +
+      '<thead><tr><th>Trabajador</th><th>Entrada</th><th>Salida</th><th class="cell-num">Horas</th><th></th></tr></thead>' +
+      '<tbody>' + rowsHtml + '</tbody>' +
+      '</table></div>';
+
+    el.statTrabajadores.textContent = totalTurnos;
+    el.statHoras.textContent = fmtHours(totalHoras);
+    el.statTotal.textContent = abiertos;
+  }
+
+  function handleAsistenciaClick(e) {
+    var btn = e.target.closest("[data-taction]");
+    if (!btn) return;
+    var row = btn.closest("tr");
+    var turnoId = row ? Number(row.dataset.turno) : null;
+    var action = btn.dataset.taction;
+    if (action === "edit") {
+      openTurnoModal(turnoId, row.dataset.worker);
+    } else if (action === "delete") {
+      turnoDeleteConfirmId = turnoId;
+      row.querySelector(".cell-actions").innerHTML = turnoActionsHtml(turnoId, true);
+    } else if (action === "cancel-delete") {
+      turnoDeleteConfirmId = null;
+      row.querySelector(".cell-actions").innerHTML = turnoActionsHtml(turnoId, false);
+    } else if (action === "confirm-delete") {
+      turnoDeleteConfirmId = null;
+      api("DELETE", "/api/turnos/" + turnoId).then(function () {
+        showToast("Turno eliminado.", "ok");
+        loadPeriod();
+      }).catch(function () {
+        showToast("No se pudo eliminar el turno.", "error");
+      });
+    }
+  }
+
+  function applyAsistenciaToNomina() {
+    var q = quincenaFor(periodAnchor);
+    var pid = periodIdFor(q);
+    var entries = (currentPeriodData && currentPeriodData.entries) || {};
+    var workerIds = Object.keys(asistenciaSubtotals);
+    if (workerIds.length === 0) {
+      showToast("No hay horas de asistencia que aplicar.", "error");
+      return;
+    }
+    Promise.all(workerIds.map(function (wid) {
+      var horasExtra = (entries[wid] && entries[wid].horasExtra) || 0;
+      return api("PUT", "/api/periods/" + pid + "/entries/" + wid, { horasNormales: round2(asistenciaSubtotals[wid]), horasExtra: horasExtra });
+    })).then(function () {
+      showToast("Horas aplicadas a la nómina de esta quincena.", "ok");
+      loadPeriod();
+    }).catch(function () {
+      showToast("No se pudieron aplicar todas las horas. Intenta de nuevo.", "error");
+    });
+  }
+
+  /* ============ Worker modal ============ */
+  function openWorkerModal(workerId) {
+    var w = workerId ? workers.find(function (x) { return x.id === workerId; }) : null;
+    var isNew = !w;
+    el.modal.innerHTML =
+      '<h2>' + (isNew ? "Nuevo trabajador" : "Editar trabajador") + '</h2>' +
+      '<div class="field"><label for="fNombre">Nombre completo</label>' +
+      '<input id="fNombre" type="text" value="' + (w ? escapeHtml(w.nombre) : "") + '" placeholder="Ej. Ana Torres Medina" autocomplete="off"></div>' +
+      '<div class="field"><label for="fPuesto">Puesto (opcional)</label>' +
+      '<input id="fPuesto" type="text" value="' + (w ? escapeHtml(w.puesto || "") : "") + '" placeholder="Ej. Instructor, Coordinador, Administrativo" autocomplete="off"></div>' +
+      '<div class="field-row">' +
+      '<div class="field"><label for="fTarifa">Tarifa normal / hora</label>' +
+      '<input id="fTarifa" class="money" type="number" min="0" step="0.5" value="' + (w ? w.tarifaNormal : "") + '" placeholder="0.00"></div>' +
+      '<div class="field"><label for="fTarifaExtra">Tarifa extra / hora</label>' +
+      '<input id="fTarifaExtra" class="money" type="number" min="0" step="0.5" value="' + (w ? w.tarifaExtra : "") + '" placeholder="0.00"></div>' +
+      '</div>' +
+      '<div class="field-hint">Sugerencia: la hora extra suele pagarse al doble de la tarifa normal.</div>' +
+      '<div class="field"><label for="fPin">PIN de acceso (4 dígitos)</label>' +
+      '<div class="field-pin-row">' +
+      '<input id="fPin" class="money" type="text" inputmode="numeric" maxlength="4" value="' + (w ? escapeHtml(w.pin || "") : "") + '" placeholder="0000">' +
+      '<button type="button" class="btn btn-ghost" id="btnGenPin">Generar</button>' +
+      '</div>' +
+      '<div class="field-hint">Lo usará para marcar su entrada y salida desde el código QR. Compártelo solo con este trabajador.</div>' +
+      '</div>' +
+      '<div class="field-error" id="fError"></div>' +
+      '<div class="modal-actions">' +
+      '<button class="btn btn-ghost" type="button" id="btnCancelModal">Cancelar</button>' +
+      '<button class="btn btn-primary" type="button" id="btnSaveModal">' + (isNew ? "Agregar" : "Guardar cambios") + '</button>' +
+      '</div>';
+
+    el.modalBackdrop.hidden = false;
+    document.getElementById("fNombre").focus();
+
+    document.getElementById("btnCancelModal").addEventListener("click", closeModal);
+    document.getElementById("fTarifa").addEventListener("blur", function () {
+      var te = document.getElementById("fTarifaExtra");
+      if (!te.value) {
+        var tn = parseFloat(this.value);
+        if (tn > 0) te.value = (tn * 2).toFixed(2);
+      }
+    });
+    // Si "Tarifa extra" ya trae la sugerencia automatica (tarifa normal x
+    // 2) y el usuario entra al campo para escribir su propio numero,
+    // seleccionamos el contenido al recibir el foco: asi lo que teclee
+    // reemplaza la sugerencia en vez de pegarse al final (por ejemplo,
+    // "240.00" + "240" no debe volverse "240.00240").
+    document.getElementById("fTarifaExtra").addEventListener("focus", function () {
+      this.select();
+    });
+    document.getElementById("btnGenPin").addEventListener("click", function () {
+      document.getElementById("fPin").value = generateLocalPinGuess();
+    });
+
+    document.getElementById("btnSaveModal").addEventListener("click", function () {
+      var nombre = document.getElementById("fNombre").value.trim();
+      var puesto = document.getElementById("fPuesto").value.trim();
+      var tarifaNormal = parseFloat(document.getElementById("fTarifa").value);
+      var tarifaExtra = parseFloat(document.getElementById("fTarifaExtra").value);
+      var pin = document.getElementById("fPin").value.trim();
+      var errEl = document.getElementById("fError");
+
+      if (!nombre) { errEl.textContent = "Escribe el nombre del trabajador."; return; }
+      if (!(tarifaNormal >= 0)) { errEl.textContent = "Escribe una tarifa normal válida."; return; }
+      if (isNaN(tarifaExtra) || tarifaExtra < 0) tarifaExtra = tarifaNormal * 2;
+      if (!/^\d{4}$/.test(pin)) { errEl.textContent = "El PIN debe tener exactamente 4 dígitos."; return; }
+
+      var payload = { nombre: nombre, puesto: puesto, tarifaNormal: tarifaNormal, tarifaExtra: tarifaExtra, pin: pin };
+      var req = isNew ? api("POST", "/api/workers", payload) : api("PUT", "/api/workers/" + w.id, payload);
+      req.then(function () {
+        closeModal();
+        showToast(isNew ? "Trabajador agregado." : "Cambios guardados.", "ok");
+        loadWorkers();
+      }).catch(function (err) {
+        errEl.textContent = err.message || "No se pudo guardar. Intenta de nuevo.";
+      });
+    });
+  }
+
+  function generateLocalPinGuess() {
+    var used = {};
+    workers.forEach(function (w) { if (w.pin) used[w.pin] = true; });
+    var pin;
+    do { pin = String(Math.floor(1000 + Math.random() * 9000)); } while (used[pin]);
+    return pin;
+  }
+
+  /* ============ Turno modal (attendance) ============ */
+  function openTurnoModal(turnoId, presetWorkerId) {
+    var turno = turnoId ? currentTurnos.find(function (t) { return t.id === turnoId; }) : null;
+    var isNew = !turno;
+    var activeWorkers = workers.filter(function (w) { return w.activo; });
+    var entradaDate = turno ? new Date(turno.entrada) : new Date();
+    var salidaDate = turno && turno.salida ? new Date(turno.salida) : null;
+
+    var workerFieldHtml;
+    if (isNew) {
+      var options = activeWorkers.map(function (w) {
+        return '<option value="' + w.id + '" ' + (String(w.id) === String(presetWorkerId) ? "selected" : "") + '>' + escapeHtml(w.nombre) + '</option>';
+      }).join("");
+      workerFieldHtml = '<div class="field"><label for="tWorker">Trabajador</label><select id="tWorker">' + options + '</select></div>';
+    } else {
+      var w = workers.find(function (x) { return String(x.id) === String(turno.workerId); });
+      workerFieldHtml = '<div class="field-hint">' + escapeHtml(w ? w.nombre : "Trabajador") + '</div>';
+    }
+
+    el.modal.innerHTML =
+      '<h2>' + (isNew ? "Registrar turno" : "Editar turno") + '</h2>' +
+      workerFieldHtml +
+      '<div class="field"><label for="tEntrada">Entrada</label><input id="tEntrada" type="datetime-local" value="' + toLocalInputValue(entradaDate) + '"></div>' +
+      '<div class="field"><label for="tSalida">Salida (déjalo vacío si el turno sigue abierto)</label><input id="tSalida" type="datetime-local" value="' + (salidaDate ? toLocalInputValue(salidaDate) : "") + '"></div>' +
+      '<div class="field-error" id="tError"></div>' +
+      '<div class="modal-actions">' +
+      '<button class="btn btn-ghost" type="button" id="btnCancelTurno">Cancelar</button>' +
+      '<button class="btn btn-primary" type="button" id="btnSaveTurno">Guardar</button>' +
+      '</div>';
+
+    el.modalBackdrop.hidden = false;
+    document.getElementById("btnCancelTurno").addEventListener("click", closeModal);
+
+    document.getElementById("btnSaveTurno").addEventListener("click", function () {
+      var errEl = document.getElementById("tError");
+      var entradaVal = document.getElementById("tEntrada").value;
+      var salidaVal = document.getElementById("tSalida").value;
+      if (!entradaVal) { errEl.textContent = "Indica la hora de entrada."; return; }
+      var eDate = new Date(entradaVal);
+      var sDate = salidaVal ? new Date(salidaVal) : null;
+      if (sDate && sDate <= eDate) { errEl.textContent = "La salida debe ser después de la entrada."; return; }
+
+      if (isNew) {
+        var workerId = document.getElementById("tWorker") ? document.getElementById("tWorker").value : presetWorkerId;
+        if (!workerId) { errEl.textContent = "Selecciona un trabajador."; return; }
+        api("POST", "/api/turnos", { workerId: Number(workerId), entrada: eDate.toISOString(), salida: sDate ? sDate.toISOString() : null })
+          .then(function () { closeModal(); showToast("Turno registrado.", "ok"); loadPeriod(); })
+          .catch(function (err) { errEl.textContent = err.message || "No se pudo guardar."; });
+      } else {
+        api("PUT", "/api/turnos/" + turno.id, { entrada: eDate.toISOString(), salida: sDate ? sDate.toISOString() : null })
+          .then(function () { closeModal(); showToast("Turno actualizado.", "ok"); loadPeriod(); })
+          .catch(function (err) { errEl.textContent = err.message || "No se pudo guardar."; });
+      }
+    });
+  }
+
+  function closeModal() { el.modalBackdrop.hidden = true; el.modal.innerHTML = ""; }
+  el.modalBackdrop.addEventListener("click", function (e) { if (e.target === el.modalBackdrop) closeModal(); });
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape" && !el.modalBackdrop.hidden) closeModal(); });
+
+  /* ============ QR modal ============ */
+  function openQrModal() {
+    el.modal.innerHTML =
+      '<h2>Código QR de asistencia</h2>' +
+      '<div class="qr-wrap">' +
+      '<div class="qr-canvas-box"><img id="qrImg" src="/api/qr.png" alt="Código QR del checador"></div>' +
+      '<div class="qr-url" id="qrUrlText">Cargando enlace…</div>' +
+      '<button class="btn btn-primary" type="button" id="btnCopyQr" style="width:100%;justify-content:center;">Copiar enlace</button>' +
+      '<p class="field-hint">Cualquier persona con este enlace puede abrir la pantalla de entrada/salida; solo podrá marcar si conoce el PIN de un trabajador activo. Imprime el código o compártelo por WhatsApp.</p>' +
+      '</div>' +
+      '<div class="modal-actions"><button class="btn btn-ghost" type="button" id="btnCloseQr">Cerrar</button></div>';
+    el.modalBackdrop.hidden = false;
+
+    var qrUrl = "";
+    api("GET", "/api/qr-url").then(function (data) {
+      qrUrl = data.url;
+      document.getElementById("qrUrlText").textContent = qrUrl;
+    }).catch(function () {
+      document.getElementById("qrUrlText").textContent = "No se pudo obtener el enlace.";
+    });
+
+    document.getElementById("btnCopyQr").addEventListener("click", function () {
+      if (!qrUrl) return;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(qrUrl).then(function () {
+          showToast("Enlace copiado.", "ok");
+        }).catch(function () { showToast("No se pudo copiar. Selecciona el enlace manualmente.", "error"); });
+      } else {
+        showToast("Selecciona el enlace manualmente para copiarlo.", "error");
+      }
+    });
+    document.getElementById("btnCloseQr").addEventListener("click", closeModal);
+  }
+  el.btnQr.addEventListener("click", openQrModal);
+
+  /* ============ Print / Export ============ */
+  el.btnPrint.addEventListener("click", function () { window.print(); });
+  el.btnExport.addEventListener("click", function () {
+    var q = quincenaFor(periodAnchor);
+    window.location.href = "/api/export/periodo/" + periodIdFor(q) + ".xlsx";
+  });
+  el.btnExportHistorial.addEventListener("click", function () {
+    window.location.href = "/api/export/historial.xlsx";
+  });
+
+  /* ============ Init ============ */
+  setView("nomina");
+  loadWorkers();
+  loadPeriod();
+})();
