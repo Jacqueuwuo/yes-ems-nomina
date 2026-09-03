@@ -57,6 +57,7 @@ CREATE TABLE IF NOT EXISTS workers (
   puesto TEXT,
   tarifa_normal REAL NOT NULL,
   tarifa_extra REAL NOT NULL,
+  id_empleado TEXT NOT NULL DEFAULT '',
   pin TEXT NOT NULL,
   activo INTEGER NOT NULL DEFAULT 1,
   orden INTEGER NOT NULL,
@@ -97,6 +98,21 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_workers_pin_activo
 // servidor (ver server.js), antes de aceptar peticiones.
 async function migrate() {
   await db.executeMultiple(SCHEMA);
+
+  // Migracion suave: si el archivo de base de datos ya existia de una
+  // version anterior a la columna id_empleado, la agregamos ahora. En una
+  // base de datos nueva la columna ya viene incluida en el CREATE TABLE de
+  // arriba, asi que este ALTER falla con "duplicate column" -- lo cual es
+  // normal y simplemente se ignora.
+  try {
+    await db.execute("ALTER TABLE workers ADD COLUMN id_empleado TEXT NOT NULL DEFAULT ''");
+  } catch (err) {
+    // La columna ya existe: no hay nada que hacer.
+  }
+  await db.execute(
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_workers_idempleado_activo
+       ON workers(id_empleado) WHERE activo = 1 AND id_empleado != ''`
+  );
 }
 
 module.exports = { db, migrate, isRemote };

@@ -9,6 +9,8 @@
 .pin-dots{ display:flex; gap:14px; }
 .pin-dot{ width:16px; height:16px; border-radius:50%; border:2px solid var(--line); }
 .pin-dot.filled{ background:var(--brand); border-color:var(--brand); }
+.id-display{ width:100%; min-height:40px; display:flex; align-items:center; justify-content:center; font-family:"IBM Plex Mono",monospace; font-size:1.4rem; font-weight:700; letter-spacing:.06em; color:var(--ink); border-bottom:2px solid var(--line); padding-bottom:6px; }
+.id-placeholder{ font-size:.85rem; font-weight:500; color:var(--ink-soft); letter-spacing:normal; }
 .ch-error{ color:var(--danger); font-size:.82rem; text-align:center; min-height:1.2em; margin:0; }
 .keypad{ display:grid; grid-template-columns:repeat(3,72px); gap:12px; }
 .key{ width:72px; height:60px; border-radius:14px; border:1px solid var(--line); background:var(--surface-2); color:var(--ink); font-size:1.3rem; font-weight:700; font-family:"IBM Plex Mono",monospace; cursor:pointer; }
@@ -22,5 +24,6 @@
 .ch-btn{ width:100%; padding:16px; border-radius:14px; border:none; font-size:1.05rem; font-weight:800; cursor:pointer; color:#fff; margin-top:6px; }
 .ch-btn-in{ background:var(--good); }
 .ch-btn-out{ background:var(--accent-strong); }
+.ch-btn:disabled{ background:var(--line); color:var(--ink-soft); cursor:not-allowed; }
 .ch-link{ background:transparent; border:none; color:var(--ink-soft); font-size:.85rem; font-weight:600; cursor:pointer; padding:6px; }
 .ch-check{ width:64px; height:64px; border-radius:50%; background:var(--good-bg); color:var(--good); display:flex; align-items:center; justify-content:center; font-size:2rem; font-weight:800; }

@@ -1,43 +1,50 @@
 /* Tema compartido por el panel de administracion, el checador y la
-   pantalla de inicio de sesion de YES EMS (Nomina). */
+   pantalla de inicio de sesion de YES EMS (Nomina).
+
+   Paleta tomada directamente del logo del leon: azul rey (la melena),
+   amarillo/dorado (el rostro) y un cafe calido (los tonos de sombra entre
+   ambos), en vez de colores genericos. */
 
 :root{
-  --paper:#F3F1EA; --surface:#FFFFFF; --surface-2:#FAF8F2;
-  --ink:#1B2926; --ink-soft:#5E6E69;
-  --line:#DEDACB; --line-soft:#EAE6D9;
-  --brand:#1F6C63; --brand-strong:#144D46; --brand-contrast:#F4F1E7;
-  --accent:#D98A2E; --accent-strong:#B36F1E; --accent-contrast:#2A1B06;
+  --paper:#F5EFE3; --surface:#FFFFFF; --surface-2:#F1E6D6;
+  --ink:#22262E; --ink-soft:#6B6156;
+  --line:#E3D5BE; --line-soft:#EFE4D1;
+  --brand:#1E4079; --brand-strong:#142B54; --brand-contrast:#FBF8F0;
+  --accent:#D6A02A; --accent-strong:#B0801A; --accent-contrast:#2B1B06;
+  --brown:#8A5A2B; --brown-strong:#6B4420; --brown-bg:#F0E2CC;
   --good:#2F7D52; --good-bg:#E4F0E5; --good-ink:#1E5738;
-  --warn:#C77A22; --warn-bg:#F6E9D5; --warn-ink:#7A4A0D;
+  --warn:#C1591F; --warn-bg:#F6E3D1; --warn-ink:#7A3A0D;
   --danger:#B14636; --danger-bg:#F6E3DE; --danger-ink:#7A2E22;
-  --sidebar-bg:#123D38; --sidebar-ink:#F2EFE5; --sidebar-line:rgba(255,255,255,.14); --sidebar-muted:#AFC8C2;
-  --shadow:0 16px 36px -16px rgba(20,40,36,.32);
+  --sidebar-bg:#0B2038; --sidebar-ink:#F1EEE3; --sidebar-line:rgba(255,255,255,.14); --sidebar-muted:#9FB2CC;
+  --shadow:0 16px 36px -16px rgba(11,32,56,.32);
   --radius:10px;
 }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
-    --paper:#0E1B18; --surface:#14231F; --surface-2:#182922;
-    --ink:#EDEAE0; --ink-soft:#9FB0A9;
-    --line:#2A3A34; --line-soft:#203129;
-    --brand:#4FB2A6; --brand-strong:#6FCABE; --brand-contrast:#06110F;
-    --accent:#E3A24E; --accent-strong:#F0B565; --accent-contrast:#2A1A05;
+    --paper:#12181F; --surface:#1A222C; --surface-2:#212B37;
+    --ink:#EDEAE0; --ink-soft:#A9AFBA;
+    --line:#2E3947; --line-soft:#232D39;
+    --brand:#6690E0; --brand-strong:#8FB0EC; --brand-contrast:#0B1420;
+    --accent:#E8B34A; --accent-strong:#F0C670; --accent-contrast:#2B1B06;
+    --brown:#C79868; --brown-strong:#DBB587; --brown-bg:#332415;
     --good:#6FBF8D; --good-bg:#163527; --good-ink:#A9DFBC;
-    --warn:#E3A24E; --warn-bg:#3A2A12; --warn-ink:#F0C68C;
+    --warn:#E28C51; --warn-bg:#3A2412; --warn-ink:#F0BE96;
     --danger:#E08C79; --danger-bg:#3B241E; --danger-ink:#F3B7A7;
-    --sidebar-bg:#0A1613; --sidebar-ink:#E9E6DB; --sidebar-line:rgba(255,255,255,.08); --sidebar-muted:#7FA098;
+    --sidebar-bg:#050D18; --sidebar-ink:#E9E6DB; --sidebar-line:rgba(255,255,255,.08); --sidebar-muted:#84A0C4;
     --shadow:0 16px 36px -16px rgba(0,0,0,.65);
   }
 }
 :root[data-theme="dark"]{
-  --paper:#0E1B18; --surface:#14231F; --surface-2:#182922;
-  --ink:#EDEAE0; --ink-soft:#9FB0A9;
-  --line:#2A3A34; --line-soft:#203129;
-  --brand:#4FB2A6; --brand-strong:#6FCABE; --brand-contrast:#06110F;
-  --accent:#E3A24E; --accent-strong:#F0B565; --accent-contrast:#2A1A05;
+  --paper:#12181F; --surface:#1A222C; --surface-2:#212B37;
+  --ink:#EDEAE0; --ink-soft:#A9AFBA;
+  --line:#2E3947; --line-soft:#232D39;
+  --brand:#6690E0; --brand-strong:#8FB0EC; --brand-contrast:#0B1420;
+  --accent:#E8B34A; --accent-strong:#F0C670; --accent-contrast:#2B1B06;
+  --brown:#C79868; --brown-strong:#DBB587; --brown-bg:#332415;
   --good:#6FBF8D; --good-bg:#163527; --good-ink:#A9DFBC;
-  --warn:#E3A24E; --warn-bg:#3A2A12; --warn-ink:#F0C68C;
+  --warn:#E28C51; --warn-bg:#3A2412; --warn-ink:#F0BE96;
   --danger:#E08C79; --danger-bg:#3B241E; --danger-ink:#F3B7A7;
-  --sidebar-bg:#0A1613; --sidebar-ink:#E9E6DB; --sidebar-line:rgba(255,255,255,.08); --sidebar-muted:#7FA098;
+  --sidebar-bg:#050D18; --sidebar-ink:#E9E6DB; --sidebar-line:rgba(255,255,255,.08); --sidebar-muted:#84A0C4;
   --shadow:0 16px 36px -16px rgba(0,0,0,.65);
 }
 
@@ -85,7 +92,7 @@ tbody td{ padding:10px 14px; border-bottom:1px solid var(--line-soft); vertical-
 tbody tr:last-child td{ border-bottom:none; }
 tbody tr.inactive{ opacity:.55; }
 .cell-name .name{ font-weight:700; font-size:.92rem; }
-.cell-name .puesto{ font-size:.75rem; color:var(--ink-soft); margin-top:1px; }
+.cell-name .puesto{ font-size:.75rem; color:var(--brown); margin-top:1px; }
 td.rate{ color:var(--ink-soft); font-size:.86rem; }
 .cell-actions{ text-align:right; white-space:nowrap; }
 .icon-btn{ width:28px; height:28px; border-radius:7px; border:1px solid transparent; background:transparent; color:var(--ink-soft); display:inline-flex; align-items:center; justify-content:center; cursor:pointer; }

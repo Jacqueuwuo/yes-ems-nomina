@@ -3,7 +3,8 @@
 
   var root = document.getElementById("checadorApp");
 
-  var step = "pin"; // pin | loading | confirm | success
+  var step = "id"; // id | pin | loading | confirm | success
+  var idValue = "";
   var pin = "";
   var error = "";
   var worker = null;
@@ -63,6 +64,39 @@
       root.innerHTML = shell('<div class="ch-msg"><p class="ch-sub">Buscando…</p></div>');
       return;
     }
+    if (step === "id") {
+      root.innerHTML = shell(
+        '<div class="ch-pin">' +
+          "<h1>Marca tu entrada o salida</h1>" +
+          '<p class="ch-sub">Escribe tu número de empleado</p>' +
+          '<div class="id-display">' + (idValue ? escapeHtml(idValue) : '<span class="id-placeholder">Número de empleado</span>') + "</div>" +
+          '<p class="ch-error">' + (error ? escapeHtml(error) : "&nbsp;") + "</p>" +
+          keypadHtml() +
+          '<button type="button" class="ch-btn ch-btn-in" id="chIdContinueBtn"' + (idValue.length === 0 ? " disabled" : "") + ">Continuar</button>" +
+          "</div>"
+      );
+      document.getElementById("chIdContinueBtn").addEventListener("click", goToPinStep);
+      return;
+    }
+    if (step === "pin") {
+      root.innerHTML = shell(
+        '<div class="ch-pin">' +
+          "<h1>Ingresa tu PIN</h1>" +
+          '<p class="ch-sub">Tu PIN de 4 dígitos</p>' +
+          '<div class="pin-dots">' + pinDots() + "</div>" +
+          '<p class="ch-error">' + (error ? escapeHtml(error) : "&nbsp;") + "</p>" +
+          keypadHtml() +
+          '<button type="button" class="ch-link" id="chBackToIdBtn">‹ Cambiar número de empleado</button>' +
+          "</div>"
+      );
+      document.getElementById("chBackToIdBtn").addEventListener("click", function () {
+        pin = "";
+        error = "";
+        step = "id";
+        render();
+      });
+      return;
+    }
     if (step === "confirm") {
       var isEntrada = pendingAction === "entrada";
       var extra = "";
@@ -98,22 +132,23 @@
       document.getElementById("chDoneBtn").addEventListener("click", reset);
       return;
     }
-    // pin (default)
-    root.innerHTML = shell(
-      '<div class="ch-pin">' +
-        "<h1>Marca tu entrada o salida</h1>" +
-        '<p class="ch-sub">Ingresa tu PIN de 4 dígitos</p>' +
-        '<div class="pin-dots">' + pinDots() + "</div>" +
-        '<p class="ch-error">' + (error ? escapeHtml(error) : "&nbsp;") + "</p>" +
-        keypadHtml() +
-        "</div>"
-    );
   }
 
   root.addEventListener("click", function (e) {
     var key = e.target.closest("[data-key]");
-    if (!key || step !== "pin") return;
+    if (!key || (step !== "id" && step !== "pin")) return;
     var k = key.dataset.key;
+    if (step === "id") {
+      if (k === "back") {
+        idValue = idValue.slice(0, -1);
+      } else if (idValue.length < 8) {
+        idValue += k;
+      }
+      error = "";
+      render();
+      return;
+    }
+    // step === "pin"
     if (k === "back") {
       pin = pin.slice(0, -1);
       error = "";
@@ -124,8 +159,16 @@
     pin += k;
     error = "";
     render();
-    if (pin.length === 4) lookupPin();
+    if (pin.length === 4) lookup();
   });
+
+  function goToPinStep() {
+    if (idValue.length === 0) return;
+    pin = "";
+    error = "";
+    step = "pin";
+    render();
+  }
 
   function api(path, body) {
     return fetch("/api/checador/" + path, {
@@ -140,10 +183,10 @@
     });
   }
 
-  function lookupPin() {
+  function lookup() {
     step = "loading";
     render();
-    api("estado", { pin: pin })
+    api("estado", { idEmpleado: idValue, pin: pin })
       .then(function (data) {
         worker = data.worker;
         turnoAbierto = data.turnoAbierto;
@@ -162,8 +205,9 @@
   function confirmAction() {
     var btn = document.getElementById("chConfirmBtn");
     if (btn) btn.disabled = true;
+    var body = { idEmpleado: idValue, pin: pin };
     if (pendingAction === "entrada") {
-      api("entrada", { pin: pin })
+      api("entrada", body)
         .then(function () {
           resultText = "Entrada registrada";
           step = "success";
@@ -172,7 +216,7 @@
         })
         .catch(fail);
     } else {
-      api("salida", { pin: pin })
+      api("salida", body)
         .then(function (data) {
           resultText = "Salida registrada (" + fmtHours(data.horas) + ")";
           step = "success";
@@ -190,12 +234,13 @@
   }
   function reset() {
     clearTimeout(resetTimer);
+    idValue = "";
     pin = "";
     error = "";
     worker = null;
     turnoAbierto = null;
     pendingAction = null;
-    step = "pin";
+    step = "id";
     render();
   }
   function scheduleReset() {

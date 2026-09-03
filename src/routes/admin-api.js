@@ -28,13 +28,20 @@ router.post("/workers", async (req, res) => {
   if (pinTaken.rows.length) {
     return res.status(409).json({ error: "Ese PIN ya lo usa otro trabajador activo." });
   }
+  const idTaken = await db.execute({
+    sql: `SELECT id FROM workers WHERE id_empleado = ? AND activo = 1`,
+    args: [v.data.idEmpleado],
+  });
+  if (idTaken.rows.length) {
+    return res.status(409).json({ error: "Ese numero de empleado ya lo usa otro trabajador activo." });
+  }
 
   const orden = Date.now();
   const creadoEn = new Date().toISOString();
   const result = await db.execute({
-    sql: `INSERT INTO workers (nombre, puesto, tarifa_normal, tarifa_extra, pin, activo, orden, creado_en)
-          VALUES (?, ?, ?, ?, ?, 1, ?, ?)`,
-    args: [v.data.nombre, v.data.puesto, v.data.tarifaNormal, v.data.tarifaExtra, v.data.pin, orden, creadoEn],
+    sql: `INSERT INTO workers (nombre, puesto, tarifa_normal, tarifa_extra, id_empleado, pin, activo, orden, creado_en)
+          VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)`,
+    args: [v.data.nombre, v.data.puesto, v.data.tarifaNormal, v.data.tarifaExtra, v.data.idEmpleado, v.data.pin, orden, creadoEn],
   });
 
   const { rows } = await db.execute({
@@ -59,10 +66,17 @@ router.put("/workers/:id", async (req, res) => {
   if (pinTaken.rows.length) {
     return res.status(409).json({ error: "Ese PIN ya lo usa otro trabajador activo." });
   }
+  const idTaken = await db.execute({
+    sql: `SELECT id FROM workers WHERE id_empleado = ? AND activo = 1 AND id != ?`,
+    args: [v.data.idEmpleado, id],
+  });
+  if (idTaken.rows.length) {
+    return res.status(409).json({ error: "Ese numero de empleado ya lo usa otro trabajador activo." });
+  }
 
   await db.execute({
-    sql: `UPDATE workers SET nombre=?, puesto=?, tarifa_normal=?, tarifa_extra=?, pin=? WHERE id=?`,
-    args: [v.data.nombre, v.data.puesto, v.data.tarifaNormal, v.data.tarifaExtra, v.data.pin, id],
+    sql: `UPDATE workers SET nombre=?, puesto=?, tarifa_normal=?, tarifa_extra=?, id_empleado=?, pin=? WHERE id=?`,
+    args: [v.data.nombre, v.data.puesto, v.data.tarifaNormal, v.data.tarifaExtra, v.data.idEmpleado, v.data.pin, id],
   });
 
   const { rows } = await db.execute({ sql: `SELECT * FROM workers WHERE id = ?`, args: [id] });
@@ -81,6 +95,7 @@ function validateWorkerBody(body) {
   const puesto = String((body && body.puesto) || "").trim();
   const tarifaNormal = Number(body && body.tarifaNormal);
   const tarifaExtra = Number(body && body.tarifaExtra);
+  const idEmpleado = String((body && body.idEmpleado) || "").trim();
   const pin = String((body && body.pin) || "").trim();
 
   if (!nombre) return { error: "Escribe el nombre del trabajador." };
@@ -88,9 +103,11 @@ function validateWorkerBody(body) {
     return { error: "Escribe una tarifa normal valida." };
   if (!Number.isFinite(tarifaExtra) || tarifaExtra < 0)
     return { error: "Escribe una tarifa extra valida." };
+  if (!/^\d{1,8}$/.test(idEmpleado))
+    return { error: "El numero de empleado debe tener solo digitos (maximo 8)." };
   if (!/^\d{4}$/.test(pin)) return { error: "El PIN debe tener exactamente 4 digitos." };
 
-  return { data: { nombre, puesto, tarifaNormal, tarifaExtra, pin } };
+  return { data: { nombre, puesto, tarifaNormal, tarifaExtra, idEmpleado, pin } };
 }
 
 function toWorkerJson(row) {
@@ -100,6 +117,7 @@ function toWorkerJson(row) {
     puesto: row.puesto || "",
     tarifaNormal: row.tarifa_normal,
     tarifaExtra: row.tarifa_extra,
+    idEmpleado: row.id_empleado || "",
     pin: row.pin,
     activo: !!row.activo,
     orden: row.orden,

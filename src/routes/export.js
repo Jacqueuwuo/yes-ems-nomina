@@ -36,6 +36,7 @@ async function periodoRows(periodId) {
       const he = e ? e.horas_extra : 0;
       rows.push({
         nombre: w.nombre,
+        idEmpleado: w.id_empleado || "",
         puesto: w.puesto || "",
         horasNormales: hn,
         tarifaNormal: w.tarifa_normal,
@@ -72,6 +73,7 @@ function addBrandHeader(sheet, subtitle) {
 
 const COLUMNS = [
   { header: "Trabajador", key: "nombre", width: 26 },
+  { header: "No. empleado", key: "idEmpleado", width: 13 },
   { header: "Puesto", key: "puesto", width: 22 },
   { header: "Horas normales", key: "horasNormales", width: 15 },
   { header: "Tarifa normal", key: "tarifaNormal", width: 14 },
@@ -97,13 +99,14 @@ function writeTable(sheet, rows, startRow) {
   rows.forEach((row) => {
     const excelRow = sheet.getRow(r);
     excelRow.getCell(1).value = row.nombre + (row.activo ? "" : " (baja)");
-    excelRow.getCell(2).value = row.puesto;
-    excelRow.getCell(3).value = row.horasNormales;
-    excelRow.getCell(4).value = row.tarifaNormal;
-    excelRow.getCell(5).value = row.horasExtra;
-    excelRow.getCell(6).value = row.tarifaExtra;
-    excelRow.getCell(7).value = row.total;
-    [4, 6, 7].forEach((c) => (excelRow.getCell(c).numFmt = '"$"#,##0.00'));
+    excelRow.getCell(2).value = row.idEmpleado;
+    excelRow.getCell(3).value = row.puesto;
+    excelRow.getCell(4).value = row.horasNormales;
+    excelRow.getCell(5).value = row.tarifaNormal;
+    excelRow.getCell(6).value = row.horasExtra;
+    excelRow.getCell(7).value = row.tarifaExtra;
+    excelRow.getCell(8).value = row.total;
+    [5, 7, 8].forEach((c) => (excelRow.getCell(c).numFmt = '"$"#,##0.00'));
     totalPago += row.total;
     r++;
   });
@@ -111,11 +114,11 @@ function writeTable(sheet, rows, startRow) {
   const totalRow = sheet.getRow(r);
   totalRow.getCell(1).value = "Total de la quincena";
   totalRow.getCell(1).font = { bold: true };
-  sheet.mergeCells(`A${r}:F${r}`);
-  totalRow.getCell(7).value = totalPago;
-  totalRow.getCell(7).numFmt = '"$"#,##0.00';
-  totalRow.getCell(7).font = { bold: true };
-  totalRow.getCell(7).border = { top: { style: "thin", color: { argb: "FFDEDACB" } } };
+  sheet.mergeCells(`A${r}:G${r}`);
+  totalRow.getCell(8).value = totalPago;
+  totalRow.getCell(8).numFmt = '"$"#,##0.00';
+  totalRow.getCell(8).font = { bold: true };
+  totalRow.getCell(8).border = { top: { style: "thin", color: { argb: "FFDEDACB" } } };
 
   return r;
 }

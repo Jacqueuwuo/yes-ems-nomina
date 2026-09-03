@@ -117,6 +117,7 @@
         '<span class="wc-top"><span class="wc-name">' + escapeHtml(w.nombre) + '</span>' +
         '<span class="wc-rate">' + fmtMoney(w.tarifaNormal) + '/h</span></span>' +
         (w.puesto ? '<span class="wc-puesto">' + escapeHtml(w.puesto) + '</span>' : '') +
+        '<span class="wc-id">No. ' + escapeHtml(w.idEmpleado || "—") + '</span>' +
         '</button>';
     }).join("");
   }
@@ -585,12 +586,19 @@
       '<input id="fTarifaExtra" class="money" type="number" min="0" step="0.5" value="' + (w ? w.tarifaExtra : "") + '" placeholder="0.00"></div>' +
       '</div>' +
       '<div class="field-hint">Sugerencia: la hora extra suele pagarse al doble de la tarifa normal.</div>' +
+      '<div class="field"><label for="fIdEmpleado">Número de empleado (hasta 8 dígitos)</label>' +
+      '<div class="field-pin-row">' +
+      '<input id="fIdEmpleado" class="money" type="text" inputmode="numeric" maxlength="8" value="' + (w ? escapeHtml(w.idEmpleado || "") : "") + '" placeholder="00000001">' +
+      '<button type="button" class="btn btn-ghost" id="btnGenId">Generar</button>' +
+      '</div>' +
+      '<div class="field-hint">Su número de identificación dentro de YES EMS. Puedes usar el mismo que ya tenga en nómina o recursos humanos.</div>' +
+      '</div>' +
       '<div class="field"><label for="fPin">PIN de acceso (4 dígitos)</label>' +
       '<div class="field-pin-row">' +
       '<input id="fPin" class="money" type="text" inputmode="numeric" maxlength="4" value="' + (w ? escapeHtml(w.pin || "") : "") + '" placeholder="0000">' +
       '<button type="button" class="btn btn-ghost" id="btnGenPin">Generar</button>' +
       '</div>' +
-      '<div class="field-hint">Lo usará para marcar su entrada y salida desde el código QR. Compártelo solo con este trabajador.</div>' +
+      '<div class="field-hint">Junto con su número de empleado, lo usará para marcar su entrada y salida desde el código QR. Compártelos solo con este trabajador.</div>' +
       '</div>' +
       '<div class="field-error" id="fError"></div>' +
       '<div class="modal-actions">' +
@@ -617,6 +625,9 @@
     document.getElementById("fTarifaExtra").addEventListener("focus", function () {
       this.select();
     });
+    document.getElementById("btnGenId").addEventListener("click", function () {
+      document.getElementById("fIdEmpleado").value = generateLocalIdGuess();
+    });
     document.getElementById("btnGenPin").addEventListener("click", function () {
       document.getElementById("fPin").value = generateLocalPinGuess();
     });
@@ -626,15 +637,17 @@
       var puesto = document.getElementById("fPuesto").value.trim();
       var tarifaNormal = parseFloat(document.getElementById("fTarifa").value);
       var tarifaExtra = parseFloat(document.getElementById("fTarifaExtra").value);
+      var idEmpleado = document.getElementById("fIdEmpleado").value.trim();
       var pin = document.getElementById("fPin").value.trim();
       var errEl = document.getElementById("fError");
 
       if (!nombre) { errEl.textContent = "Escribe el nombre del trabajador."; return; }
       if (!(tarifaNormal >= 0)) { errEl.textContent = "Escribe una tarifa normal válida."; return; }
       if (isNaN(tarifaExtra) || tarifaExtra < 0) tarifaExtra = tarifaNormal * 2;
+      if (!/^\d{1,8}$/.test(idEmpleado)) { errEl.textContent = "El número de empleado debe tener solo dígitos (máximo 8)."; return; }
       if (!/^\d{4}$/.test(pin)) { errEl.textContent = "El PIN debe tener exactamente 4 dígitos."; return; }
 
-      var payload = { nombre: nombre, puesto: puesto, tarifaNormal: tarifaNormal, tarifaExtra: tarifaExtra, pin: pin };
+      var payload = { nombre: nombre, puesto: puesto, tarifaNormal: tarifaNormal, tarifaExtra: tarifaExtra, idEmpleado: idEmpleado, pin: pin };
       var req = isNew ? api("POST", "/api/workers", payload) : api("PUT", "/api/workers/" + w.id, payload);
       req.then(function () {
         closeModal();
@@ -652,6 +665,14 @@
     var pin;
     do { pin = String(Math.floor(1000 + Math.random() * 9000)); } while (used[pin]);
     return pin;
+  }
+
+  function generateLocalIdGuess() {
+    var used = {};
+    workers.forEach(function (w) { if (w.idEmpleado) used[w.idEmpleado] = true; });
+    var id;
+    do { id = String(Math.floor(1000 + Math.random() * 9000)); } while (used[id]);
+    return id;
   }
 
   /* ============ Turno modal (attendance) ============ */

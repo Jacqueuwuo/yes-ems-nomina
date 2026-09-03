@@ -17,6 +17,7 @@
 .worker-chip .wc-name{ font-size:.87rem; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; flex:1 1 auto; }
 .worker-chip .wc-puesto{ font-size:.72rem; color:var(--sidebar-muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .worker-chip .wc-rate{ font-size:.72rem; color:var(--sidebar-muted); font-family:"IBM Plex Mono",monospace; flex:none; }
+.worker-chip .wc-id{ font-size:.68rem; color:var(--sidebar-muted); font-family:"IBM Plex Mono",monospace; opacity:.75; }
 .side-empty{ font-size:.8rem; color:var(--sidebar-muted); padding:6px 2px; line-height:1.5; }
 
 .btn-add-side{ display:flex; align-items:center; justify-content:center; gap:6px; padding:10px 12px; border-radius:8px; border:1px dashed var(--sidebar-line); background:transparent; color:var(--sidebar-ink); font-weight:600; font-size:.83rem; cursor:pointer; }

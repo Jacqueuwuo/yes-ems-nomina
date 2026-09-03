@@ -1,6 +1,7 @@
 // Rutas publicas del checador (pantalla de QR). No requieren haber
-// iniciado sesion -- el propio PIN de 4 digitos identifica al
-// trabajador. Pensadas para llamarse desde el celular de cada persona.
+// iniciado sesion -- cada trabajador se identifica con su numero de
+// empleado (hasta 8 digitos) MAS su PIN de 4 digitos, los dos juntos.
+// Pensadas para llamarse desde el celular de cada persona.
 "use strict";
 
 const express = require("express");
@@ -9,10 +10,10 @@ const { round2 } = require("../periodos");
 
 const router = express.Router();
 
-async function findActiveWorkerByPin(pin) {
+async function findActiveWorker(idEmpleado, pin) {
   const { rows } = await db.execute({
-    sql: `SELECT * FROM workers WHERE pin = ? AND activo = 1`,
-    args: [pin],
+    sql: `SELECT * FROM workers WHERE id_empleado = ? AND pin = ? AND activo = 1`,
+    args: [idEmpleado, pin],
   });
   return rows[0] || null;
 }
@@ -24,20 +25,24 @@ async function findOpenTurno(workerId) {
   return rows[0] || null;
 }
 
-function validatePin(req, res) {
+// No revelamos si el numero de empleado existe por separado del PIN --
+// solo la combinacion correcta de ambos identifica a alguien. Asi, ver el
+// mensaje de error no le dice a nadie si acerto la mitad de los datos.
+function validateCreds(req, res) {
+  const idEmpleado = String((req.body && req.body.idEmpleado) || "");
   const pin = String((req.body && req.body.pin) || "");
-  if (!/^\d{4}$/.test(pin)) {
-    res.status(400).json({ error: "PIN invalido." });
+  if (!/^\d{1,8}$/.test(idEmpleado) || !/^\d{4}$/.test(pin)) {
+    res.status(400).json({ error: "Numero de empleado o PIN invalido." });
     return null;
   }
-  return pin;
+  return { idEmpleado, pin };
 }
 
 router.post("/estado", async (req, res) => {
-  const pin = validatePin(req, res);
-  if (!pin) return;
-  const worker = await findActiveWorkerByPin(pin);
-  if (!worker) return res.status(404).json({ error: "PIN no encontrado. Verifica con tu supervisor." });
+  const creds = validateCreds(req, res);
+  if (!creds) return;
+  const worker = await findActiveWorker(creds.idEmpleado, creds.pin);
+  if (!worker) return res.status(404).json({ error: "Numero de empleado o PIN incorrectos." });
   const turno = await findOpenTurno(worker.id);
   res.json({
     worker: { id: worker.id, nombre: worker.nombre },
@@ -46,10 +51,10 @@ router.post("/estado", async (req, res) => {
 });
 
 router.post("/entrada", async (req, res) => {
-  const pin = validatePin(req, res);
-  if (!pin) return;
-  const worker = await findActiveWorkerByPin(pin);
-  if (!worker) return res.status(404).json({ error: "PIN no encontrado. Verifica con tu supervisor." });
+  const creds = validateCreds(req, res);
+  if (!creds) return;
+  const worker = await findActiveWorker(creds.idEmpleado, creds.pin);
+  if (!worker) return res.status(404).json({ error: "Numero de empleado o PIN incorrectos." });
   if (await findOpenTurno(worker.id)) {
     return res.status(409).json({ error: "Ya tienes una entrada sin salida registrada." });
   }
@@ -62,10 +67,10 @@ router.post("/entrada", async (req, res) => {
 });
 
 router.post("/salida", async (req, res) => {
-  const pin = validatePin(req, res);
-  if (!pin) return;
-  const worker = await findActiveWorkerByPin(pin);
-  if (!worker) return res.status(404).json({ error: "PIN no encontrado. Verifica con tu supervisor." });
+  const creds = validateCreds(req, res);
+  if (!creds) return;
+  const worker = await findActiveWorker(creds.idEmpleado, creds.pin);
+  if (!worker) return res.status(404).json({ error: "Numero de empleado o PIN incorrectos." });
   const turno = await findOpenTurno(worker.id);
   if (!turno) return res.status(409).json({ error: "No tienes una entrada abierta." });
 
