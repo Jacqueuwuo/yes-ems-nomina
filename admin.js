@@ -12,9 +12,15 @@
   }
   var moneyFmt = new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" });
   function fmtMoney(n) { return moneyFmt.format(n || 0); }
+  // Muestra las horas como "1 h 50 min" en vez de "1.83 h" -- mismo dato,
+  // nada mas presentado de forma natural (se usa en Asistencia y en los
+  // totales, que se calculan solos a partir de la entrada/salida real).
   function fmtHours(n) {
-    n = n || 0;
-    return n.toLocaleString("es-MX", { minimumFractionDigits: 0, maximumFractionDigits: 2 }) + " h";
+    var hm = decToHM(n);
+    if (hm.h === 0 && hm.m === 0) return "0 min";
+    if (hm.h === 0) return hm.m + " min";
+    if (hm.m === 0) return hm.h + " h";
+    return hm.h + " h " + hm.m + " min";
   }
   function fmtDateTime(d) { return d.toLocaleString("es-MX", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }); }
   // Convierte horas decimales (como se guardan) a horas y minutos enteros
