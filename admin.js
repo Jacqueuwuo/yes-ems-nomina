@@ -12,9 +12,7 @@
   }
   var moneyFmt = new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" });
   function fmtMoney(n) { return moneyFmt.format(n || 0); }
-  // Muestra las horas como "1 h 50 min" en vez de "1.83 h" -- mismo dato,
-  // nada mas presentado de forma natural (se usa en Asistencia y en los
-  // totales, que se calculan solos a partir de la entrada/salida real).
+  
   function fmtHours(n) {
     var hm = decToHM(n);
     if (hm.h === 0 && hm.m === 0) return "0 min";
