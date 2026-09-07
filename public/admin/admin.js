@@ -106,20 +106,32 @@
   }
 
   /* ============ Sidebar ============ */
+  var TIPO_LABEL = { nomina: "Nómina", residencias: "Residencias profesionales", dual: "Sistema dual" };
+  var TIPO_ORDEN = ["nomina", "residencias", "dual"];
+
+  function workerChipHtml(w) {
+    return '<button class="worker-chip" type="button" data-open-worker="' + w.id + '">' +
+      '<span class="wc-top"><span class="wc-name">' + escapeHtml(w.nombre) + '</span>' +
+      (w.tipo === "nomina" ? '<span class="wc-rate">' + fmtMoney(w.tarifaNormal) + '/h</span>' : '') + '</span>' +
+      (w.puesto ? '<span class="wc-puesto">' + escapeHtml(w.puesto) + '</span>' : '') +
+      '<span class="wc-id">No. ' + escapeHtml(w.idEmpleado || "—") + '</span>' +
+      '</button>';
+  }
+
   function renderSidebar() {
     var active = workers.filter(function (w) { return w.activo; });
     if (active.length === 0) {
       el.workerList.innerHTML = '<div class="side-empty">Aún no hay trabajadores registrados.</div>';
       return;
     }
-    el.workerList.innerHTML = active.map(function (w) {
-      return '<button class="worker-chip" type="button" data-open-worker="' + w.id + '">' +
-        '<span class="wc-top"><span class="wc-name">' + escapeHtml(w.nombre) + '</span>' +
-        '<span class="wc-rate">' + fmtMoney(w.tarifaNormal) + '/h</span></span>' +
-        (w.puesto ? '<span class="wc-puesto">' + escapeHtml(w.puesto) + '</span>' : '') +
-        '<span class="wc-id">No. ' + escapeHtml(w.idEmpleado || "—") + '</span>' +
-        '</button>';
-    }).join("");
+    var html = "";
+    TIPO_ORDEN.forEach(function (tipo) {
+      var group = active.filter(function (w) { return (w.tipo || "nomina") === tipo; });
+      if (group.length === 0) return;
+      html += '<div class="wc-group-label">' + TIPO_LABEL[tipo] + '</div>';
+      html += group.map(workerChipHtml).join("");
+    });
+    el.workerList.innerHTML = html;
   }
   el.workerList.addEventListener("click", function (e) {
     var btn = e.target.closest("[data-open-worker]");
@@ -201,15 +213,18 @@
   }
 
   /* ============ Nómina table ============ */
+  // Solo los trabajadores de tipo "nomina" tienen sueldo y aparecen en esta
+  // pestaña; los de residencias profesionales y sistema dual solo marcan
+  // asistencia (pestaña "Asistencia") y no tienen tarifa ni total a pagar.
   function displayWorkersFor(entries) {
-    var active = workers.filter(function (w) { return w.activo; });
+    var active = workers.filter(function (w) { return w.activo && (w.tipo || "nomina") === "nomina"; });
     var ids = {};
     active.forEach(function (w) { ids[w.id] = true; });
     var extra = [];
     if (entries) {
       Object.keys(entries).forEach(function (wid) {
         if (!ids[wid]) {
-          var w = workers.find(function (x) { return String(x.id) === String(wid); });
+          var w = workers.find(function (x) { return String(x.id) === String(wid) && (x.tipo || "nomina") === "nomina"; });
           if (w) extra.push(w);
         }
       });
@@ -238,16 +253,14 @@
 
     var rows = list.map(function (w) {
       var e = entries[w.id] || {};
-      var hn = e.horasNormales || 0, he = e.horasExtra || 0;
+      var hn = e.horasNormales || 0;
       var inactive = !w.activo;
-      return '<tr data-worker="' + w.id + '" data-tn="' + w.tarifaNormal + '" data-te="' + w.tarifaExtra + '" class="' + (inactive ? "inactive" : "") + '">' +
+      return '<tr data-worker="' + w.id + '" data-tn="' + w.tarifaNormal + '" class="' + (inactive ? "inactive" : "") + '">' +
         '<td class="cell-name"><div class="name">' + escapeHtml(w.nombre) + (inactive ? ' <span style="font-weight:400;color:var(--ink-soft);">(baja)</span>' : '') + '</div>' +
         (w.puesto ? '<div class="puesto">' + escapeHtml(w.puesto) + '</div>' : '') + '</td>' +
-        '<td class="cell-num"><input class="hours-input" type="number" min="0" step="0.5" data-field="horasNormales" value="' + hn + '" ' + (closed ? "disabled" : "") + ' aria-label="Horas normales de ' + escapeHtml(w.nombre) + '"></td>' +
+        '<td class="cell-num"><input class="hours-input" type="number" min="0" step="0.5" data-field="horasNormales" value="' + hn + '" ' + (closed ? "disabled" : "") + ' aria-label="Horas de ' + escapeHtml(w.nombre) + '"></td>' +
         '<td class="cell-num rate">' + fmtMoney(w.tarifaNormal) + '</td>' +
-        '<td class="cell-num"><input class="hours-input" type="number" min="0" step="0.5" data-field="horasExtra" value="' + he + '" ' + (closed ? "disabled" : "") + ' aria-label="Horas extra de ' + escapeHtml(w.nombre) + '"></td>' +
-        '<td class="cell-num rate">' + fmtMoney(w.tarifaExtra) + '</td>' +
-        '<td class="cell-num total"><span class="row-total">' + fmtMoney(hn * w.tarifaNormal + he * w.tarifaExtra) + '</span></td>' +
+        '<td class="cell-num total"><span class="row-total">' + fmtMoney(hn * w.tarifaNormal) + '</span></td>' +
         '<td class="cell-actions">' + actionsHtml(w.id, false) + '</td>' +
         '</tr>';
     }).join("");
@@ -255,12 +268,12 @@
     el.tableWrap.innerHTML =
       '<div class="table-scroll"><table id="payTable">' +
       '<thead><tr>' +
-      '<th>Trabajador</th><th class="cell-num">Horas normales</th><th class="cell-num">Tarifa/h</th>' +
-      '<th class="cell-num">Horas extra</th><th class="cell-num">Tarifa extra/h</th><th class="cell-num">Total</th><th></th>' +
+      '<th>Trabajador</th><th class="cell-num">Horas</th><th class="cell-num">Tarifa/h</th>' +
+      '<th class="cell-num">Total</th><th></th>' +
       '</tr></thead>' +
       '<tbody>' + rows + '</tbody>' +
       '<tfoot><tr>' +
-      '<td colspan="5" class="foot-label">Total de la quincena</td>' +
+      '<td colspan="3" class="foot-label">Total de la quincena</td>' +
       '<td class="cell-num" id="footTotal">$0.00</td><td></td>' +
       '</tr></tfoot>' +
       '</table></div>';
@@ -284,13 +297,11 @@
 
   function updateRowTotal(row) {
     var hn = parseFloat(row.querySelector('[data-field="horasNormales"]').value) || 0;
-    var he = parseFloat(row.querySelector('[data-field="horasExtra"]').value) || 0;
     var tn = parseFloat(row.dataset.tn) || 0;
-    var te = parseFloat(row.dataset.te) || 0;
-    var total = hn * tn + he * te;
+    var total = hn * tn;
     var totalEl = row.querySelector(".row-total");
     if (totalEl) totalEl.textContent = fmtMoney(total);
-    return { hn: hn, he: he, total: total };
+    return { hn: hn, total: total };
   }
 
   function recomputeAll() {
@@ -298,7 +309,7 @@
     var totalHoras = 0, totalPago = 0;
     rows.forEach(function (row) {
       var r = updateRowTotal(row);
-      totalHoras += r.hn + r.he;
+      totalHoras += r.hn;
       totalPago += r.total;
     });
     var footTotal = document.getElementById("footTotal");
@@ -318,8 +329,7 @@
       var row = document.querySelector('tr[data-worker="' + CSS.escape(String(workerId)) + '"]');
       if (!row) return;
       var hn = parseFloat(row.querySelector('[data-field="horasNormales"]').value) || 0;
-      var he = parseFloat(row.querySelector('[data-field="horasExtra"]').value) || 0;
-      api("PUT", "/api/periods/" + pid + "/entries/" + workerId, { horasNormales: hn, horasExtra: he })
+      api("PUT", "/api/periods/" + pid + "/entries/" + workerId, { horasNormales: hn })
         .then(function () {
           el.saveStatus.textContent = "Guardado";
           setTimeout(function () { if (el.saveStatus.textContent === "Guardado") el.saveStatus.textContent = ""; }, 1800);
@@ -500,8 +510,9 @@
         if (t.horas != null) subtotal += t.horas;
         var entradaD = new Date(t.entrada);
         var salidaD = t.salida ? new Date(t.salida) : null;
+        var tipoTag = (w.tipo || "nomina") !== "nomina" ? ' <span class="wc-type-tag">' + escapeHtml(TIPO_LABEL[w.tipo] || w.tipo) + '</span>' : "";
         return '<tr data-turno="' + t.id + '" data-worker="' + w.id + '">' +
-          '<td class="cell-name"><div class="name">' + escapeHtml(w.nombre) + '</div></td>' +
+          '<td class="cell-name"><div class="name">' + escapeHtml(w.nombre) + tipoTag + '</div></td>' +
           '<td>' + fmtDateTime(entradaD) + '</td>' +
           '<td>' + (salidaD ? fmtDateTime(salidaD) : '<span class="badge-open">Turno abierto</span>') + '</td>' +
           '<td class="cell-num">' + (t.horas != null ? fmtHours(t.horas) : "—") + '</td>' +
@@ -552,15 +563,20 @@
   function applyAsistenciaToNomina() {
     var q = quincenaFor(periodAnchor);
     var pid = periodIdFor(q);
-    var entries = (currentPeriodData && currentPeriodData.entries) || {};
-    var workerIds = Object.keys(asistenciaSubtotals);
+    // Solo tiene sentido "aplicar a nomina" para trabajadores de tipo
+    // "nomina" -- los de residencias profesionales y sistema dual no
+    // tienen entradas de nomina, su asistencia ya queda registrada tal
+    // cual en esta misma pestaña y en el Excel de asistencia.
+    var workerIds = Object.keys(asistenciaSubtotals).filter(function (wid) {
+      var w = workers.find(function (x) { return String(x.id) === String(wid); });
+      return w && (w.tipo || "nomina") === "nomina";
+    });
     if (workerIds.length === 0) {
-      showToast("No hay horas de asistencia que aplicar.", "error");
+      showToast("No hay horas de trabajadores de nómina que aplicar.", "error");
       return;
     }
     Promise.all(workerIds.map(function (wid) {
-      var horasExtra = (entries[wid] && entries[wid].horasExtra) || 0;
-      return api("PUT", "/api/periods/" + pid + "/entries/" + wid, { horasNormales: round2(asistenciaSubtotals[wid]), horasExtra: horasExtra });
+      return api("PUT", "/api/periods/" + pid + "/entries/" + wid, { horasNormales: round2(asistenciaSubtotals[wid]) });
     })).then(function () {
       showToast("Horas aplicadas a la nómina de esta quincena.", "ok");
       loadPeriod();
@@ -570,22 +586,33 @@
   }
 
   /* ============ Worker modal ============ */
+  var TIPO_OPCIONES = [
+    { value: "nomina", label: "Nómina (se le paga)" },
+    { value: "residencias", label: "Residencias profesionales (solo asistencia)" },
+    { value: "dual", label: "Sistema dual (solo asistencia)" },
+  ];
+
   function openWorkerModal(workerId) {
     var w = workerId ? workers.find(function (x) { return x.id === workerId; }) : null;
     var isNew = !w;
+    var tipoActual = w ? (w.tipo || "nomina") : "nomina";
+    var tipoOptionsHtml = TIPO_OPCIONES.map(function (o) {
+      return '<option value="' + o.value + '"' + (o.value === tipoActual ? " selected" : "") + '>' + o.label + '</option>';
+    }).join("");
+
     el.modal.innerHTML =
       '<h2>' + (isNew ? "Nuevo trabajador" : "Editar trabajador") + '</h2>' +
       '<div class="field"><label for="fNombre">Nombre completo</label>' +
       '<input id="fNombre" type="text" value="' + (w ? escapeHtml(w.nombre) : "") + '" placeholder="Ej. Ana Torres Medina" autocomplete="off"></div>' +
       '<div class="field"><label for="fPuesto">Puesto (opcional)</label>' +
       '<input id="fPuesto" type="text" value="' + (w ? escapeHtml(w.puesto || "") : "") + '" placeholder="Ej. Instructor, Coordinador, Administrativo" autocomplete="off"></div>' +
-      '<div class="field-row">' +
-      '<div class="field"><label for="fTarifa">Tarifa normal / hora</label>' +
-      '<input id="fTarifa" class="money" type="number" min="0" step="0.5" value="' + (w ? w.tarifaNormal : "") + '" placeholder="0.00"></div>' +
-      '<div class="field"><label for="fTarifaExtra">Tarifa extra / hora</label>' +
-      '<input id="fTarifaExtra" class="money" type="number" min="0" step="0.5" value="' + (w ? w.tarifaExtra : "") + '" placeholder="0.00"></div>' +
+      '<div class="field"><label for="fTipo">Tipo de trabajador</label>' +
+      '<select id="fTipo">' + tipoOptionsHtml + '</select>' +
+      '<div class="field-hint">Solo a los de "Nómina" se les calcula un salario y aparecen en la pestaña Nómina. Los otros dos tipos solo marcan entrada/salida para llevar su asistencia.</div>' +
       '</div>' +
-      '<div class="field-hint">Sugerencia: la hora extra suele pagarse al doble de la tarifa normal.</div>' +
+      '<div class="field" id="fTarifaWrap"' + (tipoActual === "nomina" ? "" : " hidden") + '>' +
+      '<label for="fTarifa">Tarifa por hora</label>' +
+      '<input id="fTarifa" class="money" type="number" min="0" step="0.5" value="' + (w ? w.tarifaNormal : "") + '" placeholder="0.00"></div>' +
       '<div class="field"><label for="fIdEmpleado">Número de empleado (hasta 8 dígitos)</label>' +
       '<div class="field-pin-row">' +
       '<input id="fIdEmpleado" class="money" type="text" inputmode="numeric" maxlength="8" value="' + (w ? escapeHtml(w.idEmpleado || "") : "") + '" placeholder="00000001">' +
@@ -610,20 +637,8 @@
     document.getElementById("fNombre").focus();
 
     document.getElementById("btnCancelModal").addEventListener("click", closeModal);
-    document.getElementById("fTarifa").addEventListener("blur", function () {
-      var te = document.getElementById("fTarifaExtra");
-      if (!te.value) {
-        var tn = parseFloat(this.value);
-        if (tn > 0) te.value = (tn * 2).toFixed(2);
-      }
-    });
-    // Si "Tarifa extra" ya trae la sugerencia automatica (tarifa normal x
-    // 2) y el usuario entra al campo para escribir su propio numero,
-    // seleccionamos el contenido al recibir el foco: asi lo que teclee
-    // reemplaza la sugerencia en vez de pegarse al final (por ejemplo,
-    // "240.00" + "240" no debe volverse "240.00240").
-    document.getElementById("fTarifaExtra").addEventListener("focus", function () {
-      this.select();
+    document.getElementById("fTipo").addEventListener("change", function () {
+      document.getElementById("fTarifaWrap").hidden = this.value !== "nomina";
     });
     document.getElementById("btnGenId").addEventListener("click", function () {
       document.getElementById("fIdEmpleado").value = generateLocalIdGuess();
@@ -635,19 +650,18 @@
     document.getElementById("btnSaveModal").addEventListener("click", function () {
       var nombre = document.getElementById("fNombre").value.trim();
       var puesto = document.getElementById("fPuesto").value.trim();
-      var tarifaNormal = parseFloat(document.getElementById("fTarifa").value);
-      var tarifaExtra = parseFloat(document.getElementById("fTarifaExtra").value);
+      var tipo = document.getElementById("fTipo").value;
+      var tarifaNormal = tipo === "nomina" ? parseFloat(document.getElementById("fTarifa").value) : 0;
       var idEmpleado = document.getElementById("fIdEmpleado").value.trim();
       var pin = document.getElementById("fPin").value.trim();
       var errEl = document.getElementById("fError");
 
       if (!nombre) { errEl.textContent = "Escribe el nombre del trabajador."; return; }
-      if (!(tarifaNormal >= 0)) { errEl.textContent = "Escribe una tarifa normal válida."; return; }
-      if (isNaN(tarifaExtra) || tarifaExtra < 0) tarifaExtra = tarifaNormal * 2;
+      if (tipo === "nomina" && !(tarifaNormal >= 0)) { errEl.textContent = "Escribe una tarifa por hora válida."; return; }
       if (!/^\d{1,8}$/.test(idEmpleado)) { errEl.textContent = "El número de empleado debe tener solo dígitos (máximo 8)."; return; }
       if (!/^\d{4}$/.test(pin)) { errEl.textContent = "El PIN debe tener exactamente 4 dígitos."; return; }
 
-      var payload = { nombre: nombre, puesto: puesto, tarifaNormal: tarifaNormal, tarifaExtra: tarifaExtra, idEmpleado: idEmpleado, pin: pin };
+      var payload = { nombre: nombre, puesto: puesto, tipo: tipo, tarifaNormal: tarifaNormal, idEmpleado: idEmpleado, pin: pin };
       var req = isNew ? api("POST", "/api/workers", payload) : api("PUT", "/api/workers/" + w.id, payload);
       req.then(function () {
         closeModal();

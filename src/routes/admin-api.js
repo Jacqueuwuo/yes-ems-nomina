@@ -39,9 +39,9 @@ router.post("/workers", async (req, res) => {
   const orden = Date.now();
   const creadoEn = new Date().toISOString();
   const result = await db.execute({
-    sql: `INSERT INTO workers (nombre, puesto, tarifa_normal, tarifa_extra, id_empleado, pin, activo, orden, creado_en)
-          VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)`,
-    args: [v.data.nombre, v.data.puesto, v.data.tarifaNormal, v.data.tarifaExtra, v.data.idEmpleado, v.data.pin, orden, creadoEn],
+    sql: `INSERT INTO workers (nombre, puesto, tarifa_normal, tarifa_extra, id_empleado, pin, tipo, activo, orden, creado_en)
+          VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
+    args: [v.data.nombre, v.data.puesto, v.data.tarifaNormal, v.data.tarifaExtra, v.data.idEmpleado, v.data.pin, v.data.tipo, orden, creadoEn],
   });
 
   const { rows } = await db.execute({
@@ -75,8 +75,8 @@ router.put("/workers/:id", async (req, res) => {
   }
 
   await db.execute({
-    sql: `UPDATE workers SET nombre=?, puesto=?, tarifa_normal=?, tarifa_extra=?, id_empleado=?, pin=? WHERE id=?`,
-    args: [v.data.nombre, v.data.puesto, v.data.tarifaNormal, v.data.tarifaExtra, v.data.idEmpleado, v.data.pin, id],
+    sql: `UPDATE workers SET nombre=?, puesto=?, tarifa_normal=?, tarifa_extra=?, id_empleado=?, pin=?, tipo=? WHERE id=?`,
+    args: [v.data.nombre, v.data.puesto, v.data.tarifaNormal, v.data.tarifaExtra, v.data.idEmpleado, v.data.pin, v.data.tipo, id],
   });
 
   const { rows } = await db.execute({ sql: `SELECT * FROM workers WHERE id = ?`, args: [id] });
@@ -90,24 +90,39 @@ router.delete("/workers/:id", async (req, res) => {
   res.json({ ok: true });
 });
 
+const TIPOS_VALIDOS = ["nomina", "residencias", "dual"];
+
+// Solo a los trabajadores de tipo "nomina" se les paga: llevan tarifa por
+// hora y aparecen en la pestana de Nomina y en el Excel con su salario. Los
+// de "residencias" (residencias profesionales) y "dual" (sistema dual) solo
+// marcan entrada/salida para llevar su asistencia -- no tienen tarifa ni
+// aparecen en la nomina ni en el total a pagar.
 function validateWorkerBody(body) {
   const nombre = String((body && body.nombre) || "").trim();
   const puesto = String((body && body.puesto) || "").trim();
-  const tarifaNormal = Number(body && body.tarifaNormal);
-  const tarifaExtra = Number(body && body.tarifaExtra);
+  const tipo = String((body && body.tipo) || "nomina").trim();
   const idEmpleado = String((body && body.idEmpleado) || "").trim();
   const pin = String((body && body.pin) || "").trim();
 
   if (!nombre) return { error: "Escribe el nombre del trabajador." };
-  if (!Number.isFinite(tarifaNormal) || tarifaNormal < 0)
-    return { error: "Escribe una tarifa normal valida." };
-  if (!Number.isFinite(tarifaExtra) || tarifaExtra < 0)
-    return { error: "Escribe una tarifa extra valida." };
+  if (!TIPOS_VALIDOS.includes(tipo)) return { error: "Tipo de trabajador invalido." };
+
+  let tarifaNormal = 0;
+  if (tipo === "nomina") {
+    tarifaNormal = Number(body && body.tarifaNormal);
+    if (!Number.isFinite(tarifaNormal) || tarifaNormal < 0)
+      return { error: "Escribe una tarifa por hora valida." };
+  }
+  // Ya no se captura hora extra (se paga todo a la misma tarifa por ahora);
+  // dejamos tarifa_extra igual a la tarifa normal solo para no romper la
+  // columna existente en la base de datos.
+  const tarifaExtra = tarifaNormal;
+
   if (!/^\d{1,8}$/.test(idEmpleado))
     return { error: "El numero de empleado debe tener solo digitos (maximo 8)." };
   if (!/^\d{4}$/.test(pin)) return { error: "El PIN debe tener exactamente 4 digitos." };
 
-  return { data: { nombre, puesto, tarifaNormal, tarifaExtra, idEmpleado, pin } };
+  return { data: { nombre, puesto, tarifaNormal, tarifaExtra, idEmpleado, pin, tipo } };
 }
 
 function toWorkerJson(row) {
@@ -119,6 +134,7 @@ function toWorkerJson(row) {
     tarifaExtra: row.tarifa_extra,
     idEmpleado: row.id_empleado || "",
     pin: row.pin,
+    tipo: row.tipo || "nomina",
     activo: !!row.activo,
     orden: row.orden,
   };

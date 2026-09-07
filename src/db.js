@@ -59,6 +59,7 @@ CREATE TABLE IF NOT EXISTS workers (
   tarifa_extra REAL NOT NULL,
   id_empleado TEXT NOT NULL DEFAULT '',
   pin TEXT NOT NULL,
+  tipo TEXT NOT NULL DEFAULT 'nomina',
   activo INTEGER NOT NULL DEFAULT 1,
   orden INTEGER NOT NULL,
   creado_en TEXT NOT NULL
@@ -113,6 +114,17 @@ async function migrate() {
     `CREATE UNIQUE INDEX IF NOT EXISTS idx_workers_idempleado_activo
        ON workers(id_empleado) WHERE activo = 1 AND id_empleado != ''`
   );
+
+  // Migracion suave: columna "tipo" (nomina / residencias / dual). En una
+  // base de datos nueva ya viene en el CREATE TABLE de arriba; en una que
+  // ya existia, este ALTER falla con "duplicate column" y se ignora. Todo
+  // trabajador que ya existiera queda como 'nomina' (el valor por default),
+  // que es el comportamiento que ya tenia antes de este cambio.
+  try {
+    await db.execute("ALTER TABLE workers ADD COLUMN tipo TEXT NOT NULL DEFAULT 'nomina'");
+  } catch (err) {
+    // La columna ya existe: no hay nada que hacer.
+  }
 }
 
 module.exports = { db, migrate, isRemote };
