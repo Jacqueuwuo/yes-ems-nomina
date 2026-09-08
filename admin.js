@@ -42,7 +42,7 @@
     return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()) + "T" + pad(d.getHours()) + ":" + pad(d.getMinutes());
   }
 
-    // Quincenas por dia de pago (15 y ultimo dia del mes, que segun el mes
+  // Quincenas por dia de pago (15 y ultimo dia del mes, que segun el mes
   // puede ser 28, 29, 30 o 31): quincena 1 va del ultimo dia del mes
   // ANTERIOR al 14 de este mes (se paga el 15); quincena 2 va del 15 al
   // dia antes del ultimo dia de este mes (se paga el ultimo dia del mes).
