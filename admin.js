@@ -214,7 +214,7 @@
   function renderTopbarLabels() {
     var q = quincenaFor(periodAnchor);
     el.periodLabel.textContent = fmtRange(q);
-    el.periodSub.textContent = "Quincena " + q.half + (q.half === 1 ? " (1–15)" : " (16–fin de mes)");
+    el.periodSub.textContent = "Quincena " + q.half + (q.half === 1 ? " (fin de mes anterior–14, se paga el 15)" : " (15–un día antes de fin de mes, se paga el último día)");
   }
   el.btnPrev.addEventListener("click", function () {
     var q = quincenaFor(periodAnchor);
