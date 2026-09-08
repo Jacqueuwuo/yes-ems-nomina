@@ -42,13 +42,30 @@
     return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()) + "T" + pad(d.getHours()) + ":" + pad(d.getMinutes());
   }
 
+    // Quincenas por dia de pago (15 y ultimo dia del mes, que segun el mes
+  // puede ser 28, 29, 30 o 31): quincena 1 va del ultimo dia del mes
+  // ANTERIOR al 14 de este mes (se paga el 15); quincena 2 va del 15 al
+  // dia antes del ultimo dia de este mes (se paga el ultimo dia del mes).
+  // El ultimo dia de cada mes siempre cae en la quincena 1 del mes
+  // siguiente, nunca en la quincena 2 de su propio mes.
+  function lastDayOfMonth(y, m) { return new Date(y, m + 1, 0).getDate(); }
   function quincenaFor(date) {
     var y = date.getFullYear(), m = date.getMonth(), day = date.getDate();
-    if (day <= 15) return { inicio: new Date(y, m, 1), fin: new Date(y, m, 15), half: 1 };
-    var lastDay = new Date(y, m + 1, 0).getDate();
-    return { inicio: new Date(y, m, 16), fin: new Date(y, m, lastDay), half: 2 };
+    var lastDay = lastDayOfMonth(y, m);
+    if (day === lastDay) {
+      var nm = m + 1, ny = y;
+      if (nm > 11) { nm = 0; ny = y + 1; }
+      return { inicio: new Date(y, m, day), fin: new Date(ny, nm, 14), half: 1, idYear: ny, idMonth: nm };
+    }
+    if (day >= 15) {
+      return { inicio: new Date(y, m, 15), fin: new Date(y, m, lastDay - 1), half: 2, idYear: y, idMonth: m };
+    }
+    var pm = m - 1, py = y;
+    if (pm < 0) { pm = 11; py = y - 1; }
+    var prevLast = lastDayOfMonth(py, pm);
+    return { inicio: new Date(py, pm, prevLast), fin: new Date(y, m, 14), half: 1, idYear: y, idMonth: m };
   }
-  function periodIdFor(q) { return q.inicio.getFullYear() + "-" + pad(q.inicio.getMonth() + 1) + "-" + q.half; }
+  function periodIdFor(q) { return q.idYear + "-" + pad(q.idMonth + 1) + "-" + q.half; }
   function fmtRange(q) {
     var a = q.inicio.toLocaleDateString("es-MX", { day: "numeric", month: "short" });
     var b = q.fin.toLocaleDateString("es-MX", { day: "numeric", month: "short", year: "numeric" });
