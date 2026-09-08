@@ -6,7 +6,7 @@
 
 const express = require("express");
 const { db } = require("../db");
-const { quincenaFromId, round2 } = require("../periodos");
+const { quincenaFromId, hoursBetween } = require("../periodos");
 
 const router = express.Router();
 
@@ -180,8 +180,12 @@ router.put("/periods/:id/entries/:workerId", async (req, res) => {
   if (!quincenaFromId(req.params.id)) return res.status(400).json({ error: "Periodo invalido." });
   await ensurePeriodo(req.params.id);
   const workerId = Number(req.params.workerId);
-  const horasNormales = round2(Number(req.body && req.body.horasNormales) || 0);
-  const horasExtra = round2(Number(req.body && req.body.horasExtra) || 0);
+  // No redondeamos a centesimas de hora aqui -- el valor que manda el panel
+  // ya viene calculado exacto a partir de horas y minutos enteros (por
+  // ejemplo 1 hora 10 minutos = 70/60 horas). Redondear de mas aqui es lo
+  // que causaba que el sueldo saliera con unos centavos de diferencia.
+  const horasNormales = Math.max(0, Number(req.body && req.body.horasNormales) || 0);
+  const horasExtra = Math.max(0, Number(req.body && req.body.horasExtra) || 0);
 
   await db.execute({
     sql: `INSERT INTO nomina_entries (periodo_id, worker_id, horas_normales, horas_extra)
@@ -220,7 +224,7 @@ router.post("/turnos", async (req, res) => {
   const workerRes = await db.execute({ sql: `SELECT id FROM workers WHERE id = ?`, args: [workerId] });
   if (!workerRes.rows.length) return res.status(404).json({ error: "Trabajador no encontrado." });
 
-  const horas = salida ? round2((new Date(salida) - new Date(entrada)) / 3600000) : null;
+  const horas = salida ? hoursBetween(entrada, salida) : null;
   const result = await db.execute({
     sql: `INSERT INTO turnos (worker_id, entrada, salida, horas, origen) VALUES (?, ?, ?, ?, 'manual')`,
     args: [workerId, entrada, salida || null, horas],
@@ -240,7 +244,7 @@ router.put("/turnos/:id", async (req, res) => {
   const entrada = req.body && req.body.entrada;
   const salida = req.body && req.body.salida;
   if (!entrada) return res.status(400).json({ error: "Falta la hora de entrada." });
-  const horas = salida ? round2((new Date(salida) - new Date(entrada)) / 3600000) : null;
+  const horas = salida ? hoursBetween(entrada, salida) : null;
 
   await db.execute({
     sql: `UPDATE turnos SET entrada = ?, salida = ?, horas = ? WHERE id = ?`,

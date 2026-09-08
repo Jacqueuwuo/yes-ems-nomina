@@ -166,6 +166,7 @@ function writeNominaTable(sheet, rows, startRow) {
     excelRow.getCell(2).value = row.idEmpleado;
     excelRow.getCell(3).value = row.puesto;
     excelRow.getCell(4).value = row.horas;
+    excelRow.getCell(4).numFmt = "0.00";
     excelRow.getCell(5).value = row.tarifa;
     excelRow.getCell(6).value = row.total;
     [5, 6].forEach((c) => (excelRow.getCell(c).numFmt = '"$"#,##0.00'));
@@ -208,6 +209,7 @@ function writeAsistenciaTable(sheet, rows, startRow) {
     excelRow.getCell(6).value = fmtHora(entradaD);
     excelRow.getCell(7).value = salidaD ? fmtHora(salidaD) : "Turno abierto";
     excelRow.getCell(8).value = row.horas != null ? row.horas : "";
+    if (row.horas != null) excelRow.getCell(8).numFmt = "0.00";
     r++;
   });
 

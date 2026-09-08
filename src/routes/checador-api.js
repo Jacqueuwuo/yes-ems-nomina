@@ -6,7 +6,7 @@
 
 const express = require("express");
 const { db } = require("../db");
-const { round2 } = require("../periodos");
+const { hoursBetween } = require("../periodos");
 
 const router = express.Router();
 
@@ -75,7 +75,7 @@ router.post("/salida", async (req, res) => {
   if (!turno) return res.status(409).json({ error: "No tienes una entrada abierta." });
 
   const salida = new Date().toISOString();
-  const horas = round2((new Date(salida) - new Date(turno.entrada)) / 3600000);
+  const horas = hoursBetween(turno.entrada, salida);
   await db.execute({
     sql: `UPDATE turnos SET salida = ?, horas = ? WHERE id = ?`,
     args: [salida, horas, turno.id],

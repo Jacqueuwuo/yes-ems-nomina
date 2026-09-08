@@ -68,6 +68,16 @@
 .table-toolbar{ display:flex; align-items:center; justify-content:flex-end; gap:8px; margin-bottom:12px; }
 .hours-input{ width:74px; padding:7px 8px; border-radius:7px; border:1px solid var(--line); background:var(--surface); color:var(--ink); font-size:.88rem; text-align:right; font-family:"IBM Plex Mono",monospace; }
 .hours-input:disabled{ background:var(--surface-2); color:var(--ink-soft); }
+
+/* Quita las flechitas de subir/bajar de los campos numericos (horas,
+   minutos y tarifa/salario) -- se escriben los numeros con el teclado. */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button{ -webkit-appearance:none; margin:0; }
+input[type="number"]{ -moz-appearance:textfield; appearance:textfield; }
+.cell-hours{ white-space:nowrap; }
+.cell-hours .hours-h, .cell-hours .hours-m{ width:46px; }
+.cell-hours .hm-sep{ font-size:.76rem; color:var(--ink-soft); margin:0 6px 0 3px; }
+.cell-hours .hours-m{ margin-left:6px; }
 .row-total{ font-weight:700; }
 
 /* ---------- QR modal ---------- */

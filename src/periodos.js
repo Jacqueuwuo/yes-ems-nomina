@@ -70,4 +70,18 @@ function round2(n) {
   return Math.round((Number(n) || 0) * 100) / 100;
 }
 
-module.exports = { quincenaFromId, fmtRangeEs, round2, pad, lastDayOfMonth };
+// Calcula las horas trabajadas entre una entrada y una salida (fechas ISO)
+// redondeando al MINUTO exacto -- nunca a centesimas de hora. Redondear a
+// centesimas de hora (como se hacia antes con round2 directo sobre el
+// resultado de la resta) puede mover el resultado unos segundos y, ya
+// multiplicado por la tarifa, cambiar el sueldo en unos centavos. Al
+// redondear a minutos enteros primero, "1 hora 10 minutos" siempre da
+// exactamente 1.16666... horas (70/60), nunca un numero "raro" como 1.17
+// que ya no corresponde a un numero exacto de minutos.
+function hoursBetween(startISO, endISO) {
+  const ms = new Date(endISO) - new Date(startISO);
+  const minutes = Math.max(0, Math.round(ms / 60000));
+  return minutes / 60;
+}
+
+module.exports = { quincenaFromId, fmtRangeEs, round2, hoursBetween, pad, lastDayOfMonth };

@@ -12,22 +12,67 @@
   }
   var moneyFmt = new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" });
   function fmtMoney(n) { return moneyFmt.format(n || 0); }
+  // Muestra las horas como "1 h 50 min" en vez de "1.83 h" -- mismo dato,
+  // nada mas presentado de forma natural (se usa en Asistencia y en los
+  // totales, que se calculan solos a partir de la entrada/salida real).
   function fmtHours(n) {
-    n = n || 0;
-    return n.toLocaleString("es-MX", { minimumFractionDigits: 0, maximumFractionDigits: 2 }) + " h";
+    var hm = decToHM(n);
+    if (hm.h === 0 && hm.m === 0) return "0 min";
+    if (hm.h === 0) return hm.m + " min";
+    if (hm.m === 0) return hm.h + " h";
+    return hm.h + " h " + hm.m + " min";
   }
   function fmtDateTime(d) { return d.toLocaleString("es-MX", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }); }
+  // Convierte horas decimales (como se guardan) a horas y minutos enteros
+  // para capturarlas de forma natural ("1 hora, 48 minutos") en vez de
+  // pedirle a quien captura que haga la conversion a decimal ella misma.
+  function decToHM(dec) {
+    dec = Math.max(0, Number(dec) || 0);
+    var h = Math.floor(dec);
+    var m = Math.round((dec - h) * 60);
+    if (m === 60) { m = 0; h += 1; }
+    return { h: h, m: m };
+  }
+  // OJO: aqui NO se redondea a centesimas de hora. "1 hora 10 minutos" debe
+  // guardarse como 70/60 horas exacto (1.16666...), no como "1.17" -- si se
+  // redondeara a centesimas antes de multiplicar por la tarifa, el sueldo
+  // podria salir con unos centavos de mas o de menos. El resultado se
+  // vuelve a convertir a horas y minutos enteros sin ningun error (ver
+  // decToHM), y el total en pesos ya se muestra correctamente redondeado a
+  // centavos al formatearlo con fmtMoney.
+  function hmToDec(h, m) {
+    h = Math.max(0, Math.floor(Number(h) || 0));
+    m = Math.max(0, Math.min(59, Math.floor(Number(m) || 0)));
+    return h + m / 60;
+  }
   function toLocalInputValue(d) {
     return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()) + "T" + pad(d.getHours()) + ":" + pad(d.getMinutes());
   }
 
+  // Quincenas por dia de pago (15 y ultimo dia del mes, que segun el mes
+  // puede ser 28, 29, 30 o 31): quincena 1 va del ultimo dia del mes
+  // ANTERIOR al 14 de este mes (se paga el 15); quincena 2 va del 15 al
+  // dia antes del ultimo dia de este mes (se paga el ultimo dia del mes).
+  // El ultimo dia de cada mes siempre cae en la quincena 1 del mes
+  // siguiente, nunca en la quincena 2 de su propio mes.
+  function lastDayOfMonth(y, m) { return new Date(y, m + 1, 0).getDate(); }
   function quincenaFor(date) {
     var y = date.getFullYear(), m = date.getMonth(), day = date.getDate();
-    if (day <= 15) return { inicio: new Date(y, m, 1), fin: new Date(y, m, 15), half: 1 };
-    var lastDay = new Date(y, m + 1, 0).getDate();
-    return { inicio: new Date(y, m, 16), fin: new Date(y, m, lastDay), half: 2 };
+    var lastDay = lastDayOfMonth(y, m);
+    if (day === lastDay) {
+      var nm = m + 1, ny = y;
+      if (nm > 11) { nm = 0; ny = y + 1; }
+      return { inicio: new Date(y, m, day), fin: new Date(ny, nm, 14), half: 1, idYear: ny, idMonth: nm };
+    }
+    if (day >= 15) {
+      return { inicio: new Date(y, m, 15), fin: new Date(y, m, lastDay - 1), half: 2, idYear: y, idMonth: m };
+    }
+    var pm = m - 1, py = y;
+    if (pm < 0) { pm = 11; py = y - 1; }
+    var prevLast = lastDayOfMonth(py, pm);
+    return { inicio: new Date(py, pm, prevLast), fin: new Date(y, m, 14), half: 1, idYear: y, idMonth: m };
   }
-  function periodIdFor(q) { return q.inicio.getFullYear() + "-" + pad(q.inicio.getMonth() + 1) + "-" + q.half; }
+  function periodIdFor(q) { return q.idYear + "-" + pad(q.idMonth + 1) + "-" + q.half; }
   function fmtRange(q) {
     var a = q.inicio.toLocaleDateString("es-MX", { day: "numeric", month: "short" });
     var b = q.fin.toLocaleDateString("es-MX", { day: "numeric", month: "short", year: "numeric" });
@@ -176,7 +221,7 @@
   function renderTopbarLabels() {
     var q = quincenaFor(periodAnchor);
     el.periodLabel.textContent = fmtRange(q);
-    el.periodSub.textContent = "Quincena " + q.half + (q.half === 1 ? " (1–15)" : " (16–fin de mes)");
+    el.periodSub.textContent = "Quincena " + q.half + (q.half === 1 ? " (fin de mes anterior–14, se paga el 15)" : " (15–un día antes de fin de mes, se paga el último día)");
   }
   el.btnPrev.addEventListener("click", function () {
     var q = quincenaFor(periodAnchor);
@@ -254,11 +299,15 @@
     var rows = list.map(function (w) {
       var e = entries[w.id] || {};
       var hn = e.horasNormales || 0;
+      var hm = decToHM(hn);
       var inactive = !w.activo;
       return '<tr data-worker="' + w.id + '" data-tn="' + w.tarifaNormal + '" class="' + (inactive ? "inactive" : "") + '">' +
         '<td class="cell-name"><div class="name">' + escapeHtml(w.nombre) + (inactive ? ' <span style="font-weight:400;color:var(--ink-soft);">(baja)</span>' : '') + '</div>' +
         (w.puesto ? '<div class="puesto">' + escapeHtml(w.puesto) + '</div>' : '') + '</td>' +
-        '<td class="cell-num"><input class="hours-input" type="number" min="0" step="0.5" data-field="horasNormales" value="' + hn + '" ' + (closed ? "disabled" : "") + ' aria-label="Horas de ' + escapeHtml(w.nombre) + '"></td>' +
+        '<td class="cell-num cell-hours">' +
+        '<input class="hours-input hours-h" type="number" min="0" step="1" data-field="horasH" value="' + hm.h + '" ' + (closed ? "disabled" : "") + ' aria-label="Horas de ' + escapeHtml(w.nombre) + '"><span class="hm-sep">h</span>' +
+        '<input class="hours-input hours-m" type="number" min="0" max="59" step="1" data-field="horasM" value="' + hm.m + '" ' + (closed ? "disabled" : "") + ' aria-label="Minutos de ' + escapeHtml(w.nombre) + '"><span class="hm-sep">min</span>' +
+        '</td>' +
         '<td class="cell-num rate">' + fmtMoney(w.tarifaNormal) + '</td>' +
         '<td class="cell-num total"><span class="row-total">' + fmtMoney(hn * w.tarifaNormal) + '</span></td>' +
         '<td class="cell-actions">' + actionsHtml(w.id, false) + '</td>' +
@@ -268,7 +317,7 @@
     el.tableWrap.innerHTML =
       '<div class="table-scroll"><table id="payTable">' +
       '<thead><tr>' +
-      '<th>Trabajador</th><th class="cell-num">Horas</th><th class="cell-num">Tarifa/h</th>' +
+      '<th>Trabajador</th><th class="cell-num">Horas y minutos</th><th class="cell-num">Tarifa/h</th>' +
       '<th class="cell-num">Total</th><th></th>' +
       '</tr></thead>' +
       '<tbody>' + rows + '</tbody>' +
@@ -296,7 +345,9 @@
   }
 
   function updateRowTotal(row) {
-    var hn = parseFloat(row.querySelector('[data-field="horasNormales"]').value) || 0;
+    var h = parseFloat(row.querySelector('[data-field="horasH"]').value) || 0;
+    var m = parseFloat(row.querySelector('[data-field="horasM"]').value) || 0;
+    var hn = hmToDec(h, m);
     var tn = parseFloat(row.dataset.tn) || 0;
     var total = hn * tn;
     var totalEl = row.querySelector(".row-total");
@@ -328,7 +379,9 @@
     saveTimers[workerId] = setTimeout(function () {
       var row = document.querySelector('tr[data-worker="' + CSS.escape(String(workerId)) + '"]');
       if (!row) return;
-      var hn = parseFloat(row.querySelector('[data-field="horasNormales"]').value) || 0;
+      var h = parseFloat(row.querySelector('[data-field="horasH"]').value) || 0;
+      var m = parseFloat(row.querySelector('[data-field="horasM"]').value) || 0;
+      var hn = hmToDec(h, m);
       api("PUT", "/api/periods/" + pid + "/entries/" + workerId, { horasNormales: hn })
         .then(function () {
           el.saveStatus.textContent = "Guardado";
@@ -347,6 +400,9 @@
     if (!input) return;
     var v = parseFloat(input.value);
     if (v < 0) input.value = 0;
+    // Los minutos son de 0 a 59 -- si se pasa (por ejemplo escribe "75"),
+    // lo dejamos en 59 para que no se guarde una hora invalida.
+    if (input.classList.contains("hours-m") && v > 59) input.value = 59;
     var row = input.closest("tr");
     updateRowTotal(row);
     recomputeAll();
@@ -576,7 +632,9 @@
       return;
     }
     Promise.all(workerIds.map(function (wid) {
-      return api("PUT", "/api/periods/" + pid + "/entries/" + wid, { horasNormales: round2(asistenciaSubtotals[wid]) });
+      // Sin round2 aqui tampoco -- el subtotal ya viene exacto (suma de
+      // horas calculadas al minuto en el servidor).
+      return api("PUT", "/api/periods/" + pid + "/entries/" + wid, { horasNormales: asistenciaSubtotals[wid] });
     })).then(function () {
       showToast("Horas aplicadas a la nómina de esta quincena.", "ok");
       loadPeriod();

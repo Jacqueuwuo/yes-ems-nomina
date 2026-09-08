@@ -21,9 +21,16 @@
   function fmtTime(d) {
     return d.toLocaleTimeString("es-MX", { hour: "numeric", minute: "2-digit" });
   }
+  // Muestra "1 h 50 min" en vez de "1.83 h" en el mensaje de salida.
   function fmtHours(n) {
-    n = n || 0;
-    return n.toLocaleString("es-MX", { minimumFractionDigits: 0, maximumFractionDigits: 2 }) + " h";
+    n = Math.max(0, Number(n) || 0);
+    var h = Math.floor(n);
+    var m = Math.round((n - h) * 60);
+    if (m === 60) { m = 0; h += 1; }
+    if (h === 0 && m === 0) return "0 min";
+    if (h === 0) return m + " min";
+    if (m === 0) return h + " h";
+    return h + " h " + m + " min";
   }
   function initials(name) {
     var parts = String(name || "").trim().split(/\s+/);
@@ -134,10 +141,10 @@
     }
   }
 
-  root.addEventListener("click", function (e) {
-    var key = e.target.closest("[data-key]");
-    if (!key || (step !== "id" && step !== "pin")) return;
-    var k = key.dataset.key;
+  // Un solo lugar que mete un digito (o borra uno) para el paso actual,
+  // sin importar si vino de tocar el teclado numerico en pantalla o de
+  // escribir con un teclado fisico -- los dos deben funcionar igual.
+  function handleKeyInput(k) {
     if (step === "id") {
       if (k === "back") {
         idValue = idValue.slice(0, -1);
@@ -148,7 +155,7 @@
       render();
       return;
     }
-    // step === "pin"
+    if (step !== "pin") return;
     if (k === "back") {
       pin = pin.slice(0, -1);
       error = "";
@@ -160,6 +167,32 @@
     error = "";
     render();
     if (pin.length === 4) lookup();
+  }
+
+  root.addEventListener("click", function (e) {
+    var key = e.target.closest("[data-key]");
+    if (!key || (step !== "id" && step !== "pin")) return;
+    handleKeyInput(key.dataset.key);
+  });
+
+  // Ademas de tocar el teclado numerico en pantalla, tambien se puede
+  // escribir con un teclado fisico (por ejemplo si el celular o la
+  // tablet del checador tiene uno conectado, o se abre desde una
+  // computadora): los digitos 0-9 y Backspace hacen exactamente lo mismo
+  // que tocar esos mismos botones, y Enter avanza al PIN una vez que ya
+  // se escribio el numero de empleado.
+  document.addEventListener("keydown", function (e) {
+    if (step !== "id" && step !== "pin") return;
+    if (e.key >= "0" && e.key <= "9") {
+      handleKeyInput(e.key);
+      e.preventDefault();
+    } else if (e.key === "Backspace") {
+      handleKeyInput("back");
+      e.preventDefault();
+    } else if (e.key === "Enter" && step === "id") {
+      goToPinStep();
+      e.preventDefault();
+    }
   });
 
   function goToPinStep() {
