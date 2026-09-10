@@ -132,7 +132,6 @@
     tableWrap: document.getElementById("tableWrap"),
     modalBackdrop: document.getElementById("modalBackdrop"),
     modal: document.getElementById("modal"),
-    btnPrint: document.getElementById("btnPrint"),
     btnExport: document.getElementById("btnExport"),
     btnExportHistorial: document.getElementById("btnExportHistorial"),
     btnQr: document.getElementById("btnQr"),
@@ -197,7 +196,6 @@
     adminView = view;
     el.tabNomina.classList.toggle("active", view === "nomina");
     el.tabAsistencia.classList.toggle("active", view === "asistencia");
-    el.btnPrint.hidden = view !== "nomina";
     el.btnExport.hidden = view !== "nomina";
     if (view === "nomina") {
       el.statLabel1.textContent = "Trabajadores";
@@ -842,8 +840,7 @@
   }
   el.btnQr.addEventListener("click", openQrModal);
 
-  /* ============ Print / Export ============ */
-  el.btnPrint.addEventListener("click", function () { window.print(); });
+  /* ============ Export ============ */
   el.btnExport.addEventListener("click", function () {
     var q = quincenaFor(periodAnchor);
     window.location.href = "/api/export/periodo/" + periodIdFor(q) + ".xlsx";

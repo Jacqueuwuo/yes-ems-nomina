@@ -2,13 +2,17 @@
 // historial completo con todas las quincenas que existan en la base de
 // datos. Requiere sesion iniciada (se protege al montar en server.js).
 //
-// Cada quincena se exporta en DOS tablas separadas, porque no todos los
-// trabajadores tienen sueldo:
-//   - "Nomina": solo trabajadores de tipo "nomina" -- horas totales,
-//     tarifa y el salario que les corresponde.
-//   - "Asistencia (sin nomina)": trabajadores de "residencias
-//     profesionales" y "sistema dual" -- solo su horario (entrada/salida
-//     de cada dia), sin ninguna columna de salario, porque no se les paga.
+// El Excel de UNA quincena especifica (/export/periodo/:id.xlsx) trae:
+//   - "Nomina": resumen de todos los trabajadores de tipo "nomina" -- horas
+//     totales, tarifa y el salario que les corresponde.
+//   - Una hoja POR CADA trabajador de nomina, con su detalle de entradas y
+//     salidas de esa quincena (para poder revisar de donde sale su pago).
+//   - "Asistencia (sin nomina)": UNA sola hoja combinada con el horario de
+//     los trabajadores de "residencias profesionales" y "sistema dual",
+//     sin ninguna columna de salario porque no se les paga.
+// El Excel de historial (/export/historial.xlsx) solo trae el resumen y la
+// asistencia combinada de cada quincena (sin hoja por persona), para que
+// el archivo no crezca sin control al acumular muchas quincenas.
 "use strict";
 
 const express = require("express");
@@ -55,6 +59,7 @@ async function nominaRows(periodId) {
     if (w.activo || e) {
       const hn = e ? e.horas_normales : 0;
       rows.push({
+        id: w.id,
         nombre: w.nombre,
         idEmpleado: w.id_empleado || "",
         puesto: w.puesto || "",
@@ -64,6 +69,15 @@ async function nominaRows(periodId) {
         activo: !!w.activo,
       });
     }
+  });
+  return rows;
+}
+
+/* ---------------- Turnos de UN trabajador (para su hoja individual) ---------------- */
+async function turnosForWorker(workerId, range) {
+  const { rows } = await db.execute({
+    sql: `SELECT * FROM turnos WHERE worker_id = ? AND entrada >= ? AND entrada <= ? ORDER BY entrada ASC`,
+    args: [workerId, range.startISO, range.endISO],
   });
   return rows;
 }
@@ -99,6 +113,34 @@ async function asistenciaRows(periodId) {
   // Ordena por nombre del trabajador y despues por fecha de entrada.
   rows.sort((a, b) => (a.nombre === b.nombre ? (a.entrada < b.entrada ? -1 : 1) : a.nombre.localeCompare(b.nombre, "es")));
   return rows;
+}
+
+// Los nombres de hoja en Excel no pueden llevar : \ / ? * [ ] , tienen que
+// medir 31 caracteres o menos, y no pueden repetirse dentro del mismo
+// archivo -- estas dos funciones garantizan eso al nombrar cada hoja
+// individual con el nombre del trabajador.
+function sanitizeSheetName(base) {
+  let s = String(base || "").replace(/[\\/?*[\]:]/g, "").trim();
+  if (!s) s = "Hoja";
+  if (s.length > 31) s = s.slice(0, 31).trim();
+  return s;
+}
+function uniqueSheetName(base, usedNames) {
+  const name = sanitizeSheetName(base);
+  if (!usedNames.has(name)) {
+    usedNames.add(name);
+    return name;
+  }
+  let i = 2;
+  while (true) {
+    const suffix = ` (${i})`;
+    const candidate = name.slice(0, 31 - suffix.length).trim() + suffix;
+    if (!usedNames.has(candidate)) {
+      usedNames.add(candidate);
+      return candidate;
+    }
+    i++;
+  }
 }
 
 function addBrandHeader(sheet, titulo, subtitle) {
@@ -216,6 +258,70 @@ function writeAsistenciaTable(sheet, rows, startRow) {
   return r;
 }
 
+const WORKER_TURNOS_COLUMNS = [
+  { header: "Fecha", width: 13 },
+  { header: "Entrada", width: 11 },
+  { header: "Salida", width: 11 },
+  { header: "Horas", width: 10 },
+];
+
+// Hoja individual de un trabajador de nomina: sus datos, el detalle de sus
+// entradas/salidas registradas en la quincena, y al final las horas y el
+// total que realmente se le va a pagar (el mismo numero que sale en la
+// hoja resumen -- el detalle de turnos es solo para que se pueda revisar
+// de donde salio ese numero).
+function writeWorkerSheet(sheet, row, turnos, rango) {
+  addBrandHeader(sheet, "Nomina individual", row.nombre + " -- " + rango);
+
+  sheet.getCell(6, 1).value = "Puesto:";
+  sheet.getCell(6, 1).font = { bold: true };
+  sheet.getCell(6, 2).value = row.puesto || "--";
+  sheet.getCell(7, 1).value = "No. de empleado:";
+  sheet.getCell(7, 1).font = { bold: true };
+  sheet.getCell(7, 2).value = row.idEmpleado || "--";
+  sheet.getCell(8, 1).value = "Tarifa por hora:";
+  sheet.getCell(8, 1).font = { bold: true };
+  sheet.getCell(8, 2).value = row.tarifa;
+  sheet.getCell(8, 2).numFmt = '"$"#,##0.00';
+
+  let r = 10;
+  if (turnos.length === 0) {
+    sheet.getCell(r, 1).value = "Sin registros de entrada/salida en esta quincena.";
+    sheet.getCell(r, 1).font = { italic: true, color: { argb: "FF5E6E69" } };
+    r += 2;
+  } else {
+    writeHeaderRow(sheet, WORKER_TURNOS_COLUMNS, r);
+    r += 1;
+    turnos.forEach((t) => {
+      const entradaD = new Date(t.entrada);
+      const salidaD = t.salida ? new Date(t.salida) : null;
+      sheet.getCell(r, 1).value = fmtFecha(entradaD);
+      sheet.getCell(r, 2).value = fmtHora(entradaD);
+      sheet.getCell(r, 3).value = salidaD ? fmtHora(salidaD) : "Turno abierto";
+      sheet.getCell(r, 4).value = t.horas != null ? t.horas : "";
+      if (t.horas != null) sheet.getCell(r, 4).numFmt = "0.00";
+      r++;
+    });
+    r += 1;
+  }
+
+  sheet.getCell(r, 1).value = "Horas capturadas en nomina:";
+  sheet.getCell(r, 1).font = { bold: true };
+  sheet.getCell(r, 2).value = row.horas;
+  sheet.getCell(r, 2).numFmt = "0.00";
+  r++;
+  sheet.getCell(r, 1).value = "Total a pagar:";
+  sheet.getCell(r, 1).font = { bold: true };
+  sheet.getCell(r, 2).value = row.total;
+  sheet.getCell(r, 2).numFmt = '"$"#,##0.00';
+  sheet.getCell(r, 2).font = { bold: true };
+
+  sheet.getColumn(1).width = 26;
+  sheet.getColumn(2).width = 13;
+  sheet.getColumn(3).width = 13;
+  sheet.getColumn(4).width = 12;
+}
+
 async function buildPeriodSheets(workbook, periodId, opts) {
   opts = opts || {};
   const q = quincenaFromId(periodId);
@@ -233,6 +339,27 @@ async function buildPeriodSheets(workbook, periodId, opts) {
   } else {
     const res = writeNominaTable(nomSheet, nomRows, 6);
     totalPago = res.totalPago;
+  }
+
+  // Ademas del resumen, una hoja por cada persona de nomina con el
+  // detalle de sus entradas/salidas de la quincena -- solo se activa para
+  // el Excel de una quincena especifica (opts.perWorkerSheets), no para el
+  // historial completo, porque ahi multiplicaria demasiado el numero de
+  // hojas (trabajadores x quincenas).
+  if (opts.perWorkerSheets && nomRows.length > 0) {
+    const range = periodRangeISO(periodId);
+    const usedNames = new Set([
+      sanitizeSheetName(opts.nominaSheetName || "Nomina"),
+      sanitizeSheetName(opts.asistenciaSheetName || "Asistencia (sin nomina)"),
+    ]);
+    for (const row of nomRows) {
+      const turnos = range ? await turnosForWorker(row.id, range) : [];
+      const sheetName = uniqueSheetName(row.nombre, usedNames);
+      const workerSheet = workbook.addWorksheet(sheetName, {
+        pageSetup: { orientation: "landscape", fitToPage: true },
+      });
+      writeWorkerSheet(workerSheet, row, turnos, rango);
+    }
   }
 
   const asisRows = await asistenciaRows(periodId);
@@ -257,7 +384,11 @@ router.get("/export/periodo/:id.xlsx", async (req, res) => {
   const workbook = new ExcelJS.Workbook();
   workbook.creator = "YES EMS";
   workbook.created = new Date();
-  await buildPeriodSheets(workbook, periodId, { nominaSheetName: "Nomina", asistenciaSheetName: "Asistencia (sin nomina)" });
+  await buildPeriodSheets(workbook, periodId, {
+    nominaSheetName: "Nomina",
+    asistenciaSheetName: "Asistencia (sin nomina)",
+    perWorkerSheets: true,
+  });
 
   res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
   res.setHeader("Content-Disposition", `attachment; filename="nomina-yesems-${periodId}.xlsx"`);
