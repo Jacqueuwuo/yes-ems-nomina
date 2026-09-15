@@ -28,8 +28,16 @@
 .btn-add-side svg{ width:15px; height:15px; }
 
 .side-foot{ margin-top:auto; padding-top:14px; border-top:1px solid var(--sidebar-line); font-size:.7rem; color:var(--sidebar-muted); display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.side-foot-actions{ display:flex; align-items:center; gap:12px; }
 .ch-link-btn{ background:transparent; border:none; color:var(--sidebar-muted); font-size:.72rem; font-weight:700; cursor:pointer; text-decoration:underline; padding:0; }
 .ch-link-btn:hover{ color:var(--sidebar-ink); }
+
+/* ---------- Modal "Mi cuenta" ---------- */
+.modal-subhead{ font-size:.95rem; font-weight:800; margin-top:4px; }
+.modal-sep{ border:none; border-top:1px solid var(--line); margin:2px 0; width:100%; }
+.admin-list{ display:flex; flex-direction:column; }
+.admin-row{ display:flex; align-items:center; justify-content:space-between; padding:8px 4px; border-bottom:1px solid var(--line); font-size:.88rem; }
+.admin-row:last-child{ border-bottom:none; }
 
 /* ---------- Main ---------- */
 .main{ display:flex; flex-direction:column; min-width:0; }

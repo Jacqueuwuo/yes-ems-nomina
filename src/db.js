@@ -21,6 +21,7 @@
 const fs = require("fs");
 const path = require("path");
 const { createClient } = require("@libsql/client");
+const bcrypt = require("bcryptjs");
 
 const REMOTE_URL = process.env.TURSO_DATABASE_URL || "";
 const isRemote = REMOTE_URL.length > 0;
@@ -89,10 +90,18 @@ CREATE TABLE IF NOT EXISTS nomina_entries (
   PRIMARY KEY (periodo_id, worker_id)
 );
 
+CREATE TABLE IF NOT EXISTS admins (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  usuario TEXT NOT NULL,
+  password_hash TEXT NOT NULL,
+  creado_en TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_turnos_worker ON turnos(worker_id);
 CREATE INDEX IF NOT EXISTS idx_turnos_entrada ON turnos(entrada);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_workers_pin_activo
   ON workers(pin) WHERE activo = 1;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_admins_usuario ON admins(usuario);
 `;
 
 // Crea las tablas si todavia no existen. Se llama una vez al arrancar el
@@ -124,6 +133,25 @@ async function migrate() {
     await db.execute("ALTER TABLE workers ADD COLUMN tipo TEXT NOT NULL DEFAULT 'nomina'");
   } catch (err) {
     // La columna ya existe: no hay nada que hacer.
+  }
+
+  // Arranque de seguridad: si todavia no existe NINGUN administrador en la
+  // base de datos (por ejemplo, la primera vez que corre este codigo sobre
+  // una instalacion que antes solo usaba ADMIN_USER/ADMIN_PASSWORD como
+  // variables de entorno), se crea uno a partir de esas mismas variables,
+  // pero con la contrasena ya cifrada (nunca se guarda en texto plano).
+  // Una vez que existe al menos un administrador, el inicio de sesion deja
+  // de leer esas variables por completo -- todo se maneja desde el panel
+  // ("Mi cuenta"), donde la contrasena se puede cambiar cuando se quiera y
+  // se pueden agregar mas administradores, cada uno con su propia
+  // contrasena cifrada.
+  const { rows: adminCountRows } = await db.execute(`SELECT COUNT(*) as c FROM admins`);
+  if (adminCountRows[0].c === 0 && process.env.ADMIN_USER && process.env.ADMIN_PASSWORD) {
+    const hash = await bcrypt.hash(process.env.ADMIN_PASSWORD, 12);
+    await db.execute({
+      sql: `INSERT INTO admins (usuario, password_hash, creado_en) VALUES (?, ?, ?)`,
+      args: [process.env.ADMIN_USER, hash, new Date().toISOString()],
+    });
   }
 }
 

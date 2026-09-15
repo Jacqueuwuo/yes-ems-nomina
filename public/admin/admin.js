@@ -114,6 +114,7 @@
   var el = {
     workerList: document.getElementById("workerList"),
     btnAddSide: document.getElementById("btnAddSide"),
+    btnAccount: document.getElementById("btnAccount"),
     btnLogout: document.getElementById("btnLogout"),
     sideUser: document.getElementById("sideUser"),
     periodLabel: document.getElementById("periodLabel"),
@@ -839,6 +840,119 @@
     document.getElementById("btnCloseQr").addEventListener("click", closeModal);
   }
   el.btnQr.addEventListener("click", openQrModal);
+
+  /* ============ Mi cuenta / administradores ============ */
+  function openAccountModal() {
+    el.modal.innerHTML =
+      '<h2>Mi cuenta y administradores</h2>' +
+      '<h3 class="modal-subhead">Cambiar mi contraseña</h3>' +
+      '<div class="field"><label for="pwActual">Contraseña actual</label><input id="pwActual" type="password" autocomplete="current-password"></div>' +
+      '<div class="field"><label for="pwNueva">Contraseña nueva</label><input id="pwNueva" type="password" autocomplete="new-password"></div>' +
+      '<div class="field"><label for="pwConfirmar">Confirmar contraseña nueva</label><input id="pwConfirmar" type="password" autocomplete="new-password"></div>' +
+      '<p class="field-hint">Mínimo 8 caracteres, con letras y números.</p>' +
+      '<div class="field-error" id="pwError"></div>' +
+      '<div class="modal-actions"><button class="btn btn-primary" type="button" id="btnSavePassword">Guardar contraseña</button></div>' +
+      '<hr class="modal-sep">' +
+      '<h3 class="modal-subhead">Administradores</h3>' +
+      '<div id="adminList" class="admin-list"><div class="field-hint">Cargando…</div></div>' +
+      '<div class="field"><label for="aUsuario">Nuevo usuario</label><input id="aUsuario" type="text" autocomplete="off"></div>' +
+      '<div class="field"><label for="aPassword">Contraseña</label><input id="aPassword" type="password" autocomplete="new-password"></div>' +
+      '<div class="field-error" id="aError"></div>' +
+      '<div class="modal-actions"><button class="btn btn-ghost" type="button" id="btnAddAdmin">Agregar administrador</button></div>' +
+      '<div class="modal-actions"><button class="btn btn-ghost" type="button" id="btnCloseAccount">Cerrar</button></div>';
+    el.modalBackdrop.hidden = false;
+
+    document.getElementById("btnCloseAccount").addEventListener("click", closeModal);
+
+    document.getElementById("btnSavePassword").addEventListener("click", function () {
+      var errEl = document.getElementById("pwError");
+      var actual = document.getElementById("pwActual").value;
+      var nueva = document.getElementById("pwNueva").value;
+      var confirmar = document.getElementById("pwConfirmar").value;
+      errEl.textContent = "";
+      if (!actual || !nueva) { errEl.textContent = "Completa los dos campos de contraseña."; return; }
+      if (nueva !== confirmar) { errEl.textContent = "La confirmación no coincide con la contraseña nueva."; return; }
+      api("PUT", "/api/account/password", { passwordActual: actual, passwordNueva: nueva }).then(function () {
+        showToast("Contraseña actualizada.", "ok");
+        document.getElementById("pwActual").value = "";
+        document.getElementById("pwNueva").value = "";
+        document.getElementById("pwConfirmar").value = "";
+      }).catch(function (err) {
+        errEl.textContent = err.message || "No se pudo cambiar la contraseña.";
+      });
+    });
+
+    // Confirmacion de "eliminar administrador" en dos pasos (igual que al
+    // dar de baja a un trabajador): primer clic pide confirmar, segundo
+    // clic ya elimina -- para que no se borre a nadie por accidente.
+    var confirmDeleteId = null;
+    function renderAdminList(admins) {
+      var listEl = document.getElementById("adminList");
+      if (!listEl) return;
+      if (!admins.length) { listEl.innerHTML = '<div class="field-hint">No hay administradores.</div>'; return; }
+      listEl.innerHTML = admins.map(function (a) {
+        var confirming = confirmDeleteId === a.id;
+        return '<div class="admin-row">' +
+          '<span>' + escapeHtml(a.usuario) + '</span>' +
+          (confirming
+            ? '<span><button class="ch-link-btn" type="button" data-cancel-admin="' + a.id + '">Cancelar</button>&nbsp; ' +
+              '<button class="ch-link-btn" type="button" data-confirm-admin="' + a.id + '">¿Eliminar?</button></span>'
+            : '<button class="ch-link-btn" type="button" data-del-admin="' + a.id + '">Eliminar</button>') +
+          '</div>';
+      }).join("");
+    }
+
+    function loadAdmins() {
+      return api("GET", "/api/admins").then(function (admins) {
+        renderAdminList(admins);
+      }).catch(function () {
+        var listEl = document.getElementById("adminList");
+        if (listEl) listEl.innerHTML = '<div class="field-hint">No se pudo cargar la lista.</div>';
+      });
+    }
+
+    document.getElementById("adminList").addEventListener("click", function (e) {
+      var del = e.target.closest("[data-del-admin]");
+      var cancel = e.target.closest("[data-cancel-admin]");
+      var confirmBtn = e.target.closest("[data-confirm-admin]");
+      if (del) {
+        confirmDeleteId = Number(del.getAttribute("data-del-admin"));
+        loadAdmins();
+      } else if (cancel) {
+        confirmDeleteId = null;
+        loadAdmins();
+      } else if (confirmBtn) {
+        var id = Number(confirmBtn.getAttribute("data-confirm-admin"));
+        confirmDeleteId = null;
+        api("DELETE", "/api/admins/" + id).then(function () {
+          showToast("Administrador eliminado.", "ok");
+          loadAdmins();
+        }).catch(function (err) {
+          showToast(err.message || "No se pudo eliminar.", "error");
+          loadAdmins();
+        });
+      }
+    });
+
+    document.getElementById("btnAddAdmin").addEventListener("click", function () {
+      var errEl = document.getElementById("aError");
+      var usuario = document.getElementById("aUsuario").value.trim();
+      var password = document.getElementById("aPassword").value;
+      errEl.textContent = "";
+      if (!usuario) { errEl.textContent = "Escribe un nombre de usuario."; return; }
+      api("POST", "/api/admins", { usuario: usuario, password: password }).then(function () {
+        showToast("Administrador agregado.", "ok");
+        document.getElementById("aUsuario").value = "";
+        document.getElementById("aPassword").value = "";
+        loadAdmins();
+      }).catch(function (err) {
+        errEl.textContent = err.message || "No se pudo agregar.";
+      });
+    });
+
+    loadAdmins();
+  }
+  el.btnAccount.addEventListener("click", openAccountModal);
 
   /* ============ Export ============ */
   el.btnExport.addEventListener("click", function () {

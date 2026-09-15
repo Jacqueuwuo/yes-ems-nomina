@@ -105,6 +105,11 @@ function validateWorkerBody(body) {
   const pin = String((body && body.pin) || "").trim();
 
   if (!nombre) return { error: "Escribe el nombre del trabajador." };
+  // Topes de longitud como capa extra de validacion en el backend (nunca
+  // solo en el frontend): evitan que alguien guarde textos absurdamente
+  // largos en la base de datos, por error o a proposito.
+  if (nombre.length > 120) return { error: "El nombre es demasiado largo (maximo 120 caracteres)." };
+  if (puesto.length > 120) return { error: "El puesto es demasiado largo (maximo 120 caracteres)." };
   if (!TIPOS_VALIDOS.includes(tipo)) return { error: "Tipo de trabajador invalido." };
 
   let tarifaNormal = 0;

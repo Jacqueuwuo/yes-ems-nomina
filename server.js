@@ -7,7 +7,14 @@ require("dotenv").config({ quiet: true });
 const path = require("path");
 const express = require("express");
 const session = require("express-session");
+const rateLimit = require("express-rate-limit");
 
+// ADMIN_USER/ADMIN_PASSWORD solo se usan UNA vez, para crear el primer
+// administrador en la base de datos la primera vez que corre el servidor
+// (ver src/db.js). Despues de eso, las contrasenas se manejan cifradas
+// desde el panel ("Mi cuenta"), y estas dos variables ya no se vuelven a
+// leer -- pero se piden aqui igual para no romper instalaciones existentes
+// que ya las tenian configuradas.
 const required = ["ADMIN_USER", "ADMIN_PASSWORD", "SESSION_SECRET"];
 const missing = required.filter((k) => !process.env[k]);
 if (missing.length) {
@@ -32,6 +39,31 @@ const PUBLIC_DIR = path.join(__dirname, "public");
 
 app.set("trust proxy", 1);
 app.use(express.json());
+
+// Este sistema es de uso interno (nomina y checador de un solo lugar de
+// trabajo) -- no tiene ningun motivo para aparecer en buscadores como
+// Google. Este encabezado le pide a los buscadores que no indexen nada.
+app.use((req, res, next) => {
+  res.setHeader("X-Robots-Tag", "noindex, nofollow");
+  next();
+});
+
+// Limite general de peticiones por IP a toda la API, ademas de los limites
+// mas estrictos que ya tienen /api/login y /api/checador/* especificamente
+// (ver src/auth.js y src/routes/checador-api.js). Este es solo una red de
+// seguridad adicional contra un uso abusivo o automatizado del sistema en
+// general -- el limite es amplio a proposito para no estorbar el uso
+// normal del panel (que hace varias peticiones por segundo al escribir
+// horas, por ejemplo).
+const limitadorApi = rateLimit({
+  windowMs: 5 * 60 * 1000, // 5 minutos
+  limit: 600,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Demasiadas peticiones. Espera unos minutos e intenta de nuevo." },
+});
+app.use("/api", limitadorApi);
+
 app.use(
   session({
     name: "yesems.sid",
@@ -40,6 +72,12 @@ app.use(
     saveUninitialized: false,
     cookie: {
       httpOnly: true,
+      // "auto" hace que la cookie de sesion solo se envie por HTTPS cuando
+      // la peticion en si llego por HTTPS (Render siempre usa HTTPS de
+      // cara al publico) y funcione igual en http://localhost al probar en
+      // tu computadora. Junto con "trust proxy" de arriba, detecta esto
+      // correctamente aunque Render este como intermediario.
+      secure: "auto",
       sameSite: "lax",
       maxAge: 1000 * 60 * 60 * 12, // 12 horas
     },
