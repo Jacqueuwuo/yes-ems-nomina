@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Iniciar sesión — YES EMS Nómina</title>
+<link rel="icon" href="/assets/favicon.ico">
+<link rel="manifest" href="/manifest-admin.json">
+<meta name="theme-color" content="#1E4079">
+<link rel="apple-touch-icon" href="/assets/icon-192.png">
+<link rel="stylesheet" href="/assets/theme.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  body{ min-height:100vh; display:flex; align-items:center; justify-content:center; background:var(--sidebar-bg); padding:20px; }
+  .card{ width:100%; max-width:360px; background:var(--surface); border-radius:18px; box-shadow:var(--shadow); padding:32px 28px; display:flex; flex-direction:column; gap:16px; }
+  .logo{ width:64px; height:64px; border-radius:14px; align-self:center; }
+  h1{ font-size:1.15rem; text-align:center; }
+  .sub{ font-size:.82rem; color:var(--ink-soft); text-align:center; margin-top:-8px; }
+  form{ display:flex; flex-direction:column; gap:14px; margin-top:6px; }
+  .btn-primary{ justify-content:center; padding:11px; font-size:.9rem; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <img class="logo" src="/assets/logo.png" alt="YES EMS">
+    <h1>YES EMS — Nómina</h1>
+    <p class="sub">Panel de administración</p>
+    <form id="loginForm">
+      <div class="field">
+        <label for="usuario">Usuario</label>
+        <input id="usuario" name="usuario" type="text" autocomplete="username" required>
+      </div>
+      <div class="field">
+        <label for="password">Contraseña</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required>
+      </div>
+      <p class="field-error" id="loginError">&nbsp;</p>
+      <button class="btn btn-primary" type="submit">Entrar</button>
+    </form>
+  </div>
+
+<script>
+  document.getElementById("loginForm").addEventListener("submit", function(e){
+    e.preventDefault();
+    var errEl = document.getElementById("loginError");
+    errEl.textContent = "";
+    var usuario = document.getElementById("usuario").value.trim();
+    var password = document.getElementById("password").value;
+    fetch("/api/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ usuario: usuario, password: password })
+    }).then(function(r){ return r.json().then(function(data){ return { ok:r.ok, data:data }; }); })
+      .then(function(res){
+        if(res.ok){ window.location.href = "/admin"; }
+        else { errEl.textContent = (res.data && res.data.error) || "No se pudo iniciar sesión."; }
+      })
+      .catch(function(){ errEl.textContent = "No se pudo conectar con el servidor."; });
+  });
+</script>
+</body>
+</html>

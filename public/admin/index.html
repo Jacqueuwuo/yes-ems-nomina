@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>YES EMS (Nómina)</title>
+<link rel="icon" href="/assets/favicon.ico">
+<link rel="manifest" href="/manifest-admin.json">
+<meta name="theme-color" content="#1E4079">
+<link rel="apple-touch-icon" href="/assets/icon-192.png">
+<link rel="stylesheet" href="/assets/theme.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="/admin/admin.css">
+</head>
+<body>
+<div class="app" id="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <img src="/assets/logo.png" alt="YES EMS">
+      <div class="brand-text">
+        <div class="name">YES EMS</div>
+        <div class="tag">Nómina quincenal</div>
+      </div>
+    </div>
+
+    <div class="side-section">
+      <div class="side-label">Trabajadores</div>
+      <div class="worker-list" id="workerList">
+        <div class="side-empty">Cargando…</div>
+      </div>
+      <button class="btn-add-side" id="btnAddSide" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+        Nuevo trabajador
+      </button>
+    </div>
+
+    <div class="side-foot">
+      <span id="sideUser">&nbsp;</span>
+      <div class="side-foot-actions">
+        <button class="ch-link-btn" id="btnAccount" type="button">Mi cuenta</button>
+        <button class="ch-link-btn" id="btnLogout" type="button">Cerrar sesión</button>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <div class="period-nav">
+        <button class="nav-btn" id="btnPrev" type="button" aria-label="Quincena anterior">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>
+        </button>
+        <div>
+          <div class="period-label" id="periodLabel">Cargando…</div>
+          <div class="period-sub" id="periodSub">&nbsp;</div>
+        </div>
+        <button class="nav-btn" id="btnNext" type="button" aria-label="Quincena siguiente">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+        </button>
+      </div>
+
+      <button class="status-pill open" id="statusPill" type="button"><span class="dot"></span><span id="statusText">Abierta</span></button>
+      <span class="save-status" id="saveStatus"></span>
+
+      <div class="topbar-actions">
+        <button class="btn btn-ghost" id="btnQr" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
+          Código QR
+        </button>
+        <button class="btn btn-ghost" id="btnExportHistorial" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h11l5 5v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z"/><path d="M14 4v5h5"/></svg>
+          Historial
+        </button>
+        <button class="btn btn-primary" id="btnExport" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>
+          Exportar Excel
+        </button>
+      </div>
+    </header>
+
+    <nav class="view-tabs">
+      <button class="view-tab active" type="button" id="tabNomina">Nómina</button>
+      <button class="view-tab" type="button" id="tabAsistencia">Asistencia</button>
+    </nav>
+
+    <section class="stats">
+      <div class="stat-tile">
+        <div class="label" id="statLabel1">Trabajadores</div>
+        <div class="value" id="statTrabajadores">–</div>
+      </div>
+      <div class="stat-tile">
+        <div class="label" id="statLabel2">Horas registradas</div>
+        <div class="value" id="statHoras">–</div>
+      </div>
+      <div class="stat-tile accent">
+        <div class="label" id="statLabel3">Total a pagar</div>
+        <div class="value" id="statTotal">–</div>
+      </div>
+    </section>
+
+    <section class="table-wrap" id="tableWrap">
+      <div class="loading-state">Cargando quincena…</div>
+    </section>
+  </main>
+</div>
+
+<div class="modal-backdrop" id="modalBackdrop" hidden>
+  <div class="modal" id="modal" role="dialog" aria-modal="true"></div>
+</div>
+
+<div class="toast-stack" id="toastStack"></div>
+
+<script src="/admin/admin.js"></script>
+<script>
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", function () {
+      navigator.serviceWorker.register("/service-worker.js").catch(function () {});
+    });
+  }
+</script>
+</body>
+</html>
