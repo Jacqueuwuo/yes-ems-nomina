@@ -28,8 +28,16 @@
 .btn-add-side svg{ width:15px; height:15px; }
 
 .side-foot{ margin-top:auto; padding-top:14px; border-top:1px solid var(--sidebar-line); font-size:.7rem; color:var(--sidebar-muted); display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.side-foot-actions{ display:flex; align-items:center; gap:12px; }
 .ch-link-btn{ background:transparent; border:none; color:var(--sidebar-muted); font-size:.72rem; font-weight:700; cursor:pointer; text-decoration:underline; padding:0; }
 .ch-link-btn:hover{ color:var(--sidebar-ink); }
+
+/* ---------- Modal "Mi cuenta" ---------- */
+.modal-subhead{ font-size:.95rem; font-weight:800; margin-top:4px; }
+.modal-sep{ border:none; border-top:1px solid var(--line); margin:2px 0; width:100%; }
+.admin-list{ display:flex; flex-direction:column; }
+.admin-row{ display:flex; align-items:center; justify-content:space-between; padding:8px 4px; border-bottom:1px solid var(--line); font-size:.88rem; }
+.admin-row:last-child{ border-bottom:none; }
 
 /* ---------- Main ---------- */
 .main{ display:flex; flex-direction:column; min-width:0; }
@@ -68,11 +76,53 @@
 .table-toolbar{ display:flex; align-items:center; justify-content:flex-end; gap:8px; margin-bottom:12px; }
 .hours-input{ width:74px; padding:7px 8px; border-radius:7px; border:1px solid var(--line); background:var(--surface); color:var(--ink); font-size:.88rem; text-align:right; font-family:"IBM Plex Mono",monospace; }
 .hours-input:disabled{ background:var(--surface-2); color:var(--ink-soft); }
+
+/* Quita las flechitas de subir/bajar de los campos numericos (horas,
+   minutos y tarifa/salario) -- se escriben los numeros con el teclado. */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button{ -webkit-appearance:none; margin:0; }
+input[type="number"]{ -moz-appearance:textfield; appearance:textfield; }
 .cell-hours{ white-space:nowrap; }
 .cell-hours .hours-h, .cell-hours .hours-m{ width:46px; }
 .cell-hours .hm-sep{ font-size:.76rem; color:var(--ink-soft); margin:0 6px 0 3px; }
 .cell-hours .hours-m{ margin-left:6px; }
 .row-total{ font-weight:700; }
+
+/* ---------- Tipos de trabajador (en el modal de trabajador) ---------- */
+.field-pin-row select{ flex:1; min-width:0; }
+.tipo-new{ display:flex; flex-direction:column; gap:8px; padding:12px; margin-top:6px; border:1px dashed var(--line); border-radius:8px; background:var(--surface-2); }
+.tipo-new input[type="text"]{ padding:9px 10px; border-radius:8px; border:1px solid var(--line); background:var(--surface); color:var(--ink); font-size:.9rem; font-family:"Manrope",sans-serif; width:100%; }
+.tipo-check{ display:flex; align-items:flex-start; gap:8px; font-size:.8rem; color:var(--ink); text-transform:none !important; letter-spacing:0 !important; font-weight:600 !important; cursor:pointer; }
+.tipo-check input{ margin-top:2px; width:auto !important; }
+.tipo-new-actions{ display:flex; justify-content:flex-end; gap:8px; }
+.tipo-list{ display:flex; flex-direction:column; border-top:1px solid var(--line); padding-top:6px; }
+.tipo-row{ display:flex; align-items:center; justify-content:space-between; gap:8px; padding:5px 2px; font-size:.84rem; }
+.tipo-row-kind{ font-size:.7rem; color:var(--ink-soft); margin-left:4px; }
+.tipo-del{ background:transparent; border:1px solid transparent; color:var(--ink-soft); font-size:1rem; line-height:1; padding:3px 8px; border-radius:6px; cursor:pointer; }
+.tipo-del:hover{ color:var(--danger); border-color:var(--line); }
+.tipo-del.confirming{ font-size:.72rem; font-weight:700; color:var(--danger); border-color:var(--danger); }
+
+/* ---------- Historial por fechas ---------- */
+.modal.modal-wide{ max-width:720px; }
+.hist-range{ display:grid; grid-template-columns:1fr 1fr auto; gap:10px; align-items:end; }
+.hist-presets{ display:flex; flex-wrap:wrap; gap:6px; margin-top:-6px; }
+.hist-chip{ padding:5px 11px; border-radius:999px; border:1px solid var(--line); background:var(--surface); color:var(--ink-soft); font-size:.74rem; font-weight:700; cursor:pointer; }
+.hist-chip:hover{ color:var(--brand); border-color:var(--brand); }
+.hist-list{ max-height:46vh; overflow-y:auto; }
+.hist-table{ min-width:560px; }
+.hist-table td{ padding:9px 12px; vertical-align:middle; }
+.hist-table .name{ font-weight:700; font-size:.88rem; }
+.hist-table .puesto{ font-size:.72rem; color:var(--ink-soft); }
+.hist-table tr.hist-empty td{ color:var(--ink-soft); }
+.hist-table input[type="checkbox"]{ width:16px; height:16px; cursor:pointer; }
+.hist-status{ display:inline-block; font-size:.7rem; font-weight:700; border-radius:999px; padding:2px 9px; }
+.hist-status.open{ background:var(--warn-bg); color:var(--warn-ink); }
+.hist-status.closed{ background:var(--good-bg); color:var(--good-ink); }
+.btn-sm{ padding:5px 10px; font-size:.76rem; }
+@media (max-width:520px){
+  .hist-range{ grid-template-columns:1fr 1fr; }
+  .hist-range .btn{ grid-column:1 / -1; justify-content:center; }
+}
 
 /* ---------- QR modal ---------- */
 .qr-wrap{ display:flex; flex-direction:column; align-items:center; gap:12px; text-align:center; }

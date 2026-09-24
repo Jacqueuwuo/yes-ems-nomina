@@ -70,4 +70,51 @@ function round2(n) {
   return Math.round((Number(n) || 0) * 100) / 100;
 }
 
-module.exports = { quincenaFromId, fmtRangeEs, round2, pad, lastDayOfMonth };
+// Calcula las horas trabajadas entre una entrada y una salida (fechas ISO)
+// redondeando al MINUTO exacto -- nunca a centesimas de hora. Redondear a
+// centesimas de hora (como se hacia antes con round2 directo sobre el
+// resultado de la resta) puede mover el resultado unos segundos y, ya
+// multiplicado por la tarifa, cambiar el sueldo en unos centavos. Al
+// redondear a minutos enteros primero, "1 hora 10 minutos" siempre da
+// exactamente 1.16666... horas (70/60), nunca un numero "raro" como 1.17
+// que ya no corresponde a un numero exacto de minutos.
+function hoursBetween(startISO, endISO) {
+  const ms = new Date(endISO) - new Date(startISO);
+  const minutes = Math.max(0, Math.round(ms / 60000));
+  return minutes / 60;
+}
+
+// Devuelve todas las quincenas (en orden cronologico) que se traslapan,
+// aunque sea un dia, con el rango [desde, hasta] (ambos "YYYY-MM-DD").
+// Cada elemento trae { id, inicio, fin, half, ... } igual que quincenaFromId.
+function quincenasEnRango(desde, hasta) {
+  const [y1, m1] = desde.split("-").map(Number);
+  const [y2, m2] = hasta.split("-").map(Number);
+  const out = [];
+  // Empezamos un mes antes (la quincena 1 empieza el ultimo dia del mes
+  // anterior) y terminamos un mes despues por la misma razon.
+  let y = y1, m = m1 - 1;
+  if (m < 1) { m = 12; y -= 1; }
+  const limite = y2 * 12 + m2 + 1;
+  let guard = 0;
+  while (y * 12 + m <= limite && guard < 400) {
+    for (const half of [1, 2]) {
+      const id = `${y}-${pad(m)}-${half}`;
+      const q = quincenaFromId(id);
+      if (q && q.fin >= desde && q.inicio <= hasta) out.push({ id, ...q });
+    }
+    m += 1;
+    if (m > 12) { m = 1; y += 1; }
+    guard++;
+  }
+  return out;
+}
+
+// Acepta una lista "2026-08-1,2026-08-2" y devuelve solo los ids validos,
+// sin repetir y en orden cronologico.
+function parsePeriodIds(str) {
+  const ids = String(str || "").split(",").map((s) => s.trim()).filter((s) => quincenaFromId(s));
+  return Array.from(new Set(ids)).sort();
+}
+
+module.exports = { quincenaFromId, fmtRangeEs, round2, hoursBetween, pad, lastDayOfMonth, quincenasEnRango, parsePeriodIds };
