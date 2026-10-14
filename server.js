@@ -31,6 +31,7 @@ const { router: authRouter, requireAuth, guardAdminPage } = require("./src/auth"
 const checadorApi = require("./src/routes/checador-api");
 const adminApi = require("./src/routes/admin-api");
 const exportApi = require("./src/routes/export");
+const exportPdfApi = require("./src/routes/export-pdf");
 const qrApi = require("./src/routes/qr");
 
 const app = express();
@@ -89,6 +90,7 @@ app.use(authRouter);
 app.use("/api/checador", checadorApi);
 app.use("/api", requireAuth, adminApi);
 app.use("/api", requireAuth, exportApi);
+app.use("/api", requireAuth, exportPdfApi);
 app.use("/api", requireAuth, qrApi);
 
 /* ------------------------------- Paginas -------------------------------- */

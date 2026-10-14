@@ -351,7 +351,10 @@
         '<button class="confirm-btn" type="button" data-action="cancel-delete">No</button>' +
         '<button class="confirm-btn yes" type="button" data-action="confirm-delete">Sí</button>';
     }
-    return '<button class="icon-btn" type="button" data-action="edit" title="Editar" aria-label="Editar trabajador">' +
+    return '<button class="icon-btn" type="button" data-action="pdf" title="Descargar PDF" aria-label="Descargar PDF de la nómina de este trabajador">' +
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>' +
+      '</button>' +
+      '<button class="icon-btn" type="button" data-action="edit" title="Editar" aria-label="Editar trabajador">' +
       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>' +
       '</button>' +
       '<button class="icon-btn danger" type="button" data-action="delete" title="Eliminar" aria-label="Eliminar trabajador">' +
@@ -431,7 +434,9 @@
       var row = btn.closest("tr");
       var workerId = row ? Number(row.dataset.worker) : null;
       var action = btn.dataset.action;
-      if (action === "edit") {
+      if (action === "pdf") {
+        downloadWorkerPdf(workerId);
+      } else if (action === "edit") {
         openWorkerModal(workerId);
       } else if (action === "delete") {
         deleteConfirmId = workerId;
@@ -598,7 +603,10 @@
       }).join("");
       totalHoras += subtotal;
       asistenciaSubtotals[w.id] = subtotal;
-      return body + '<tr class="subtotal-row"><td colspan="3">Subtotal — ' + escapeHtml(w.nombre) + '</td><td class="cell-num">' + fmtHours(subtotal) + '</td><td></td></tr>';
+      return body + '<tr class="subtotal-row"><td colspan="3">Subtotal — ' + escapeHtml(w.nombre) + '</td><td class="cell-num">' + fmtHours(subtotal) + '</td>' +
+        '<td class="cell-actions"><button class="icon-btn" type="button" data-dl-worker="' + w.id + '" title="Descargar PDF" aria-label="Descargar PDF de horas de ' + escapeHtml(w.nombre) + '">' +
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>' +
+        '</button></td></tr>';
     }).join("");
 
     holder.innerHTML =
@@ -613,6 +621,11 @@
   }
 
   function handleAsistenciaClick(e) {
+    var dlBtn = e.target.closest("[data-dl-worker]");
+    if (dlBtn) {
+      downloadWorkerPdf(Number(dlBtn.getAttribute("data-dl-worker")));
+      return;
+    }
     var btn = e.target.closest("[data-taction]");
     if (!btn) return;
     var row = btn.closest("tr");
@@ -1068,9 +1081,17 @@
   /* ============ Export ============ */
   el.btnExport.addEventListener("click", function () {
     var q = quincenaFor(periodAnchor);
-    window.location.href = "/api/export/periodo/" + periodIdFor(q) + ".xlsx";
+    window.location.href = "/api/export/periodo/" + periodIdFor(q) + "/resumen.pdf";
   });
   el.btnExportHistorial.addEventListener("click", openHistorialModal);
+
+  // Descarga el PDF individual de un trabajador (su recibo de nomina si es
+  // de un tipo pagado, o solo su desglose de horas si no) de la quincena
+  // que se esta viendo en este momento.
+  function downloadWorkerPdf(workerId) {
+    var q = quincenaFor(periodAnchor);
+    window.location.href = "/api/export/periodo/" + periodIdFor(q) + "/trabajador/" + workerId + ".pdf";
+  }
 
   /* ============ Historial por fechas ============ */
   // Ventana para escoger que quincenas descargar: se elige un rango de

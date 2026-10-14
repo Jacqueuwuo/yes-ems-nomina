@@ -20,105 +20,15 @@ const express = require("express");
 const path = require("path");
 const fs = require("fs");
 const ExcelJS = require("exceljs");
-const { db } = require("../db");
 const { quincenaFromId, fmtRangeEs, quincenasEnRango, parsePeriodIds } = require("../periodos");
-const { tiposMap, clavesPagadas } = require("../tipos");
+const { db } = require("../db");
+const { periodRangeISO, nominaRows, turnosForWorker, asistenciaRows } = require("../nomina-data");
 
 const router = express.Router();
 
 const LOGO_PATH = path.join(__dirname, "..", "..", "public", "assets", "logo.png");
 const BRAND_COLOR = "FF123D38"; // ARGB
 const HEADER_FILL = "FFEAE6D9";
-
-function periodRangeISO(periodId) {
-  const q = quincenaFromId(periodId);
-  if (!q) return null;
-  return { startISO: `${q.inicio}T00:00:00.000Z`, endISO: `${q.fin}T23:59:59.999Z` };
-}
-
-/* --------------------------- Filas: nomina (con sueldo) --------------------------- */
-async function nominaRows(periodId) {
-  const pagadas = await clavesPagadas();
-  const workersRes = await db.execute({
-    sql: `SELECT * FROM workers WHERE tipo IN (${pagadas.map(() => "?").join(",")}) ORDER BY orden ASC`,
-    args: pagadas,
-  });
-  const entriesRes = await db.execute({
-    sql: `SELECT worker_id, horas_normales FROM nomina_entries WHERE periodo_id = ?`,
-    args: [periodId],
-  });
-  const entryMap = {};
-  entriesRes.rows.forEach((e) => (entryMap[e.worker_id] = e));
-
-  // Incluye a todos los trabajadores activos de tipo "nomina", mas
-  // cualquiera dado de baja que aun tenga horas capturadas en esta
-  // quincena (para no perder su registro historico).
-  const rows = [];
-  workersRes.rows.forEach((w) => {
-    const e = entryMap[w.id];
-    if (w.activo || e) {
-      const hn = e ? e.horas_normales : 0;
-      rows.push({
-        id: w.id,
-        nombre: w.nombre,
-        idEmpleado: w.id_empleado || "",
-        puesto: w.puesto || "",
-        horas: hn,
-        tarifa: w.tarifa_normal,
-        total: hn * w.tarifa_normal,
-        activo: !!w.activo,
-      });
-    }
-  });
-  return rows;
-}
-
-/* ---------------- Turnos de UN trabajador (para su hoja individual) ---------------- */
-async function turnosForWorker(workerId, range) {
-  const { rows } = await db.execute({
-    sql: `SELECT * FROM turnos WHERE worker_id = ? AND entrada >= ? AND entrada <= ? ORDER BY entrada ASC`,
-    args: [workerId, range.startISO, range.endISO],
-  });
-  return rows;
-}
-
-/* ------------------------ Filas: asistencia (sin sueldo) ------------------------ */
-async function asistenciaRows(periodId) {
-  const range = periodRangeISO(periodId);
-  if (!range) return [];
-  const tipos = await tiposMap();
-  const pagadas = await clavesPagadas();
-  const workersRes = await db.execute({
-    sql: `SELECT * FROM workers WHERE tipo NOT IN (${pagadas.map(() => "?").join(",")})`,
-    args: pagadas,
-  });
-  const workerMap = {};
-  workersRes.rows.forEach((w) => (workerMap[w.id] = w));
-  if (workersRes.rows.length === 0) return [];
-
-  const turnosRes = await db.execute({
-    sql: `SELECT * FROM turnos WHERE entrada >= ? AND entrada <= ? ORDER BY worker_id ASC, entrada ASC`,
-    args: [range.startISO, range.endISO],
-  });
-
-  const rows = [];
-  turnosRes.rows.forEach((t) => {
-    const w = workerMap[t.worker_id];
-    if (!w) return; // es de tipo "nomina", o el trabajador ya no existe
-    rows.push({
-      nombre: w.nombre,
-      idEmpleado: w.id_empleado || "",
-      puesto: w.puesto || "",
-      tipo: (tipos[w.tipo] && tipos[w.tipo].nombre) || w.tipo,
-      entrada: t.entrada,
-      salida: t.salida,
-      horas: t.horas,
-    });
-  });
-  // Ordena por nombre del trabajador y despues por fecha de entrada.
-  rows.sort((a, b) => (a.nombre === b.nombre ? (a.entrada < b.entrada ? -1 : 1) : a.nombre.localeCompare(b.nombre, "es")));
-  return rows;
-}
 
 // Los nombres de hoja en Excel no pueden llevar : \ / ? * [ ] , tienen que
 // medir 31 caracteres o menos, y no pueden repetirse dentro del mismo
