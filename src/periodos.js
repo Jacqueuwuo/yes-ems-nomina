@@ -1,0 +1,120 @@
+// Helpers para trabajar con "periodos" (quincenas de pago) a partir de su
+// id, con el mismo formato que genera el panel: "YYYY-MM-1" o "YYYY-MM-2".
+//
+// Las quincenas se cuentan por dia de pago (15 y ultimo dia del mes, que
+// puede ser 28, 29, 30 o 31 segun el mes):
+//   Quincena 1: del ultimo dia del mes ANTERIOR al 14 de este mes. Se paga
+//               el 15.
+//   Quincena 2: del 15 al dia antes del ultimo dia de este mes. Se paga el
+//               ultimo dia del mes (30, 31, o 28/29 en febrero).
+// Es decir, el ultimo dia de cada mes siempre es el primer dia de la
+// quincena 1 del mes siguiente (nunca el ultimo dia de la quincena 2 de su
+// propio mes).
+"use strict";
+
+function pad(n) {
+  return String(n).padStart(2, "0");
+}
+
+function lastDayOfMonth(year, monthIndex0) {
+  return new Date(Date.UTC(year, monthIndex0 + 1, 0)).getUTCDate();
+}
+
+const MESES = [
+  "enero", "febrero", "marzo", "abril", "mayo", "junio",
+  "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+];
+
+// Devuelve { year, monthIndex, half, inicio, fin } con inicio/fin como
+// "YYYY-MM-DD", o null si el id no tiene un formato valido.
+function quincenaFromId(id) {
+  const m = /^(\d{4})-(\d{2})-([12])$/.exec(String(id || ""));
+  if (!m) return null;
+  const year = Number(m[1]);
+  const monthNum = Number(m[2]);
+  const monthIndex = monthNum - 1;
+  const half = Number(m[3]);
+  if (monthIndex < 0 || monthIndex > 11) return null;
+
+  if (half === 1) {
+    // Quincena 1: del ultimo dia del mes anterior al 14 de este mes.
+    let prevMonthIndex = monthIndex - 1;
+    let prevYear = year;
+    if (prevMonthIndex < 0) { prevMonthIndex = 11; prevYear = year - 1; }
+    const prevLast = lastDayOfMonth(prevYear, prevMonthIndex);
+    const inicio = `${prevYear}-${pad(prevMonthIndex + 1)}-${pad(prevLast)}`;
+    return { year, monthIndex, half, inicio, fin: `${m[1]}-${m[2]}-14` };
+  }
+  // Quincena 2: del 15 al dia antes del ultimo dia de este mes.
+  const last = lastDayOfMonth(year, monthIndex);
+  return { year, monthIndex, half, inicio: `${m[1]}-${m[2]}-15`, fin: `${m[1]}-${m[2]}-${pad(last - 1)}` };
+}
+
+function fmtRangeEs(periodId) {
+  const q = quincenaFromId(periodId);
+  if (!q) return periodId;
+  const mes = MESES[q.monthIndex];
+  const dFin = Number(q.fin.slice(-2));
+  if (q.half === 1) {
+    // La quincena 1 empieza en el mes anterior (ver quincenaFromId).
+    const iniParts = q.inicio.split("-");
+    const mesIni = MESES[Number(iniParts[1]) - 1];
+    const dIni = Number(iniParts[2]);
+    return `${dIni} de ${mesIni}–${dFin} de ${mes} de ${q.year}`;
+  }
+  const dIni = Number(q.inicio.slice(-2));
+  return `${dIni}-${dFin} de ${mes} de ${q.year}`;
+}
+
+function round2(n) {
+  return Math.round((Number(n) || 0) * 100) / 100;
+}
+
+// Calcula las horas trabajadas entre una entrada y una salida (fechas ISO)
+// redondeando al MINUTO exacto -- nunca a centesimas de hora. Redondear a
+// centesimas de hora (como se hacia antes con round2 directo sobre el
+// resultado de la resta) puede mover el resultado unos segundos y, ya
+// multiplicado por la tarifa, cambiar el sueldo en unos centavos. Al
+// redondear a minutos enteros primero, "1 hora 10 minutos" siempre da
+// exactamente 1.16666... horas (70/60), nunca un numero "raro" como 1.17
+// que ya no corresponde a un numero exacto de minutos.
+function hoursBetween(startISO, endISO) {
+  const ms = new Date(endISO) - new Date(startISO);
+  const minutes = Math.max(0, Math.round(ms / 60000));
+  return minutes / 60;
+}
+
+// Devuelve todas las quincenas (en orden cronologico) que se traslapan,
+// aunque sea un dia, con el rango [desde, hasta] (ambos "YYYY-MM-DD").
+// Cada elemento trae { id, inicio, fin, half, ... } igual que quincenaFromId.
+function quincenasEnRango(desde, hasta) {
+  const [y1, m1] = desde.split("-").map(Number);
+  const [y2, m2] = hasta.split("-").map(Number);
+  const out = [];
+  // Empezamos un mes antes (la quincena 1 empieza el ultimo dia del mes
+  // anterior) y terminamos un mes despues por la misma razon.
+  let y = y1, m = m1 - 1;
+  if (m < 1) { m = 12; y -= 1; }
+  const limite = y2 * 12 + m2 + 1;
+  let guard = 0;
+  while (y * 12 + m <= limite && guard < 400) {
+    for (const half of [1, 2]) {
+      const id = `${y}-${pad(m)}-${half}`;
+      const q = quincenaFromId(id);
+      if (q && q.fin >= desde && q.inicio <= hasta) out.push({ id, ...q });
+    }
+    m += 1;
+    if (m > 12) { m = 1; y += 1; }
+    guard++;
+  }
+  return out;
+}
+
+// Acepta una lista "2026-08-1,2026-08-2" y devuelve solo los ids validos,
+// sin repetir y en orden cronologico.
+function parsePeriodIds(str) {
+  const ids = String(str || "").split(",").map((s) => s.trim()).filter((s) => quincenaFromId(s));
+  return Array.from(new Set(ids)).sort();
+}
+
+module.exports = { quincenaFromId, fmtRangeEs, round2, hoursBetween, pad, lastDayOfMonth, quincenasEnRango, parsePeriodIds };
