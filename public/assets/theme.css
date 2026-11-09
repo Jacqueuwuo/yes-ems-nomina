@@ -1,0 +1,127 @@
+/* Tema compartido por el panel de administracion, el checador y la
+   pantalla de inicio de sesion de YES EMS (Nomina).
+
+   Paleta tomada directamente del logo del leon: azul rey (la melena),
+   amarillo/dorado (el rostro) y un cafe calido (los tonos de sombra entre
+   ambos), en vez de colores genericos. */
+
+:root{
+  --paper:#F5EFE3; --surface:#FFFFFF; --surface-2:#F1E6D6;
+  --ink:#22262E; --ink-soft:#6B6156;
+  --line:#E3D5BE; --line-soft:#EFE4D1;
+  --brand:#1E4079; --brand-strong:#142B54; --brand-contrast:#FBF8F0;
+  --accent:#D6A02A; --accent-strong:#B0801A; --accent-contrast:#2B1B06;
+  --brown:#8A5A2B; --brown-strong:#6B4420; --brown-bg:#F0E2CC;
+  --good:#2F7D52; --good-bg:#E4F0E5; --good-ink:#1E5738;
+  --warn:#C1591F; --warn-bg:#F6E3D1; --warn-ink:#7A3A0D;
+  --danger:#B14636; --danger-bg:#F6E3DE; --danger-ink:#7A2E22;
+  --sidebar-bg:#0B2038; --sidebar-ink:#F1EEE3; --sidebar-line:rgba(255,255,255,.14); --sidebar-muted:#9FB2CC;
+  --shadow:0 16px 36px -16px rgba(11,32,56,.32);
+  --radius:10px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#12181F; --surface:#1A222C; --surface-2:#212B37;
+    --ink:#EDEAE0; --ink-soft:#A9AFBA;
+    --line:#2E3947; --line-soft:#232D39;
+    --brand:#6690E0; --brand-strong:#8FB0EC; --brand-contrast:#0B1420;
+    --accent:#E8B34A; --accent-strong:#F0C670; --accent-contrast:#2B1B06;
+    --brown:#C79868; --brown-strong:#DBB587; --brown-bg:#332415;
+    --good:#6FBF8D; --good-bg:#163527; --good-ink:#A9DFBC;
+    --warn:#E28C51; --warn-bg:#3A2412; --warn-ink:#F0BE96;
+    --danger:#E08C79; --danger-bg:#3B241E; --danger-ink:#F3B7A7;
+    --sidebar-bg:#050D18; --sidebar-ink:#E9E6DB; --sidebar-line:rgba(255,255,255,.08); --sidebar-muted:#84A0C4;
+    --shadow:0 16px 36px -16px rgba(0,0,0,.65);
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#12181F; --surface:#1A222C; --surface-2:#212B37;
+  --ink:#EDEAE0; --ink-soft:#A9AFBA;
+  --line:#2E3947; --line-soft:#232D39;
+  --brand:#6690E0; --brand-strong:#8FB0EC; --brand-contrast:#0B1420;
+  --accent:#E8B34A; --accent-strong:#F0C670; --accent-contrast:#2B1B06;
+  --brown:#C79868; --brown-strong:#DBB587; --brown-bg:#332415;
+  --good:#6FBF8D; --good-bg:#163527; --good-ink:#A9DFBC;
+  --warn:#E28C51; --warn-bg:#3A2412; --warn-ink:#F0BE96;
+  --danger:#E08C79; --danger-bg:#3B241E; --danger-ink:#F3B7A7;
+  --sidebar-bg:#050D18; --sidebar-ink:#E9E6DB; --sidebar-line:rgba(255,255,255,.08); --sidebar-muted:#84A0C4;
+  --shadow:0 16px 36px -16px rgba(0,0,0,.65);
+}
+
+*{box-sizing:border-box;}
+[hidden]{ display:none !important; }
+html,body{ height:100%; }
+body{ margin:0; background:var(--paper); color:var(--ink); font-family:"Manrope",system-ui,-apple-system,"Segoe UI",sans-serif; -webkit-font-smoothing:antialiased; }
+h1,h2,h3{ font-family:"Manrope",system-ui,sans-serif; margin:0; }
+button{ font-family:inherit; }
+input:focus-visible, button:focus-visible, select:focus-visible, [tabindex]:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
+.num, .money, .hours-input, td.cell-num{ font-family:"IBM Plex Mono", ui-monospace, monospace; font-variant-numeric:tabular-nums; }
+img{ max-width:100%; }
+
+/* Botones */
+.btn{ display:inline-flex; align-items:center; gap:6px; padding:9px 14px; border-radius:8px; border:1px solid var(--line); background:var(--surface); color:var(--ink); font-weight:600; font-size:.83rem; cursor:pointer; white-space:nowrap; }
+.btn:hover{ background:var(--surface-2); }
+.btn svg{ width:15px; height:15px; }
+.btn-primary{ background:var(--brand); border-color:var(--brand); color:var(--brand-contrast); }
+.btn-primary:hover{ background:var(--brand-strong); border-color:var(--brand-strong); }
+.btn-ghost{ background:transparent; }
+.btn:disabled{ opacity:.45; cursor:not-allowed; }
+
+/* Campos de formulario / modal */
+.field{ display:flex; flex-direction:column; gap:5px; }
+.field label{ font-size:.75rem; font-weight:700; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.05em; }
+.field input, .field select{ padding:10px 11px; border-radius:8px; border:1px solid var(--line); background:var(--paper); color:var(--ink); font-size:.92rem; font-family:"Manrope",sans-serif; width:100%; }
+.field input.money{ font-family:"IBM Plex Mono",monospace; }
+.field-row{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.field-pin-row{ display:flex; gap:8px; }
+.field-pin-row input{ flex:1; }
+.field-hint{ font-size:.72rem; color:var(--ink-soft); }
+.field-error{ font-size:.76rem; color:var(--danger); min-height:1em; }
+
+.modal-backdrop{ position:fixed; inset:0; background:rgba(10,20,18,.45); display:flex; align-items:center; justify-content:center; padding:20px; z-index:50; }
+.modal{ background:var(--surface); border-radius:14px; box-shadow:var(--shadow); width:100%; max-width:420px; padding:26px; display:flex; flex-direction:column; gap:16px; max-height:90vh; overflow-y:auto; }
+.modal h2{ font-size:1.1rem; }
+.modal-actions{ display:flex; justify-content:flex-end; gap:8px; margin-top:4px; }
+
+/* Tablas */
+.table-scroll{ overflow-x:auto; border:1px solid var(--line); border-radius:var(--radius); background:var(--surface); }
+table{ width:100%; border-collapse:collapse; min-width:760px; }
+thead th{ text-align:left; font-size:.68rem; text-transform:uppercase; letter-spacing:.07em; color:var(--ink-soft); font-weight:700; padding:12px 14px; border-bottom:1px solid var(--line); background:var(--surface-2); white-space:nowrap; }
+th.cell-num, td.cell-num{ text-align:right; }
+tbody td{ padding:10px 14px; border-bottom:1px solid var(--line-soft); vertical-align:middle; }
+tbody tr:last-child td{ border-bottom:none; }
+tbody tr.inactive{ opacity:.55; }
+.cell-name .name{ font-weight:700; font-size:.92rem; }
+.cell-name .puesto{ font-size:.75rem; color:var(--brown); margin-top:1px; }
+td.rate{ color:var(--ink-soft); font-size:.86rem; }
+.cell-actions{ text-align:right; white-space:nowrap; }
+.icon-btn{ width:28px; height:28px; border-radius:7px; border:1px solid transparent; background:transparent; color:var(--ink-soft); display:inline-flex; align-items:center; justify-content:center; cursor:pointer; }
+.icon-btn:hover{ background:var(--surface-2); color:var(--ink); }
+.icon-btn.danger:hover{ background:var(--danger-bg); color:var(--danger-ink); }
+.icon-btn svg{ width:14px; height:14px; }
+.confirm-text{ font-size:.75rem; color:var(--ink-soft); margin-right:4px; }
+.confirm-btn{ font-size:.72rem; font-weight:700; padding:5px 9px; border-radius:6px; border:1px solid var(--line); background:var(--surface); cursor:pointer; margin-left:4px; }
+.confirm-btn.yes{ background:var(--danger); border-color:var(--danger); color:#fff; }
+.badge-open{ display:inline-block; padding:3px 8px; border-radius:999px; background:var(--warn-bg); color:var(--warn-ink); font-size:.72rem; font-weight:700; }
+tr.subtotal-row td{ background:var(--surface-2); font-weight:700; font-size:.82rem; color:var(--ink-soft); }
+tr.subtotal-row td.cell-num{ color:var(--ink); }
+tfoot td{ padding:13px 14px; font-weight:700; border-top:1px solid var(--line); background:var(--surface-2); }
+tfoot .foot-label{ text-transform:uppercase; font-size:.7rem; letter-spacing:.07em; color:var(--ink-soft); }
+
+/* Estados */
+.empty-state{ display:flex; flex-direction:column; align-items:center; text-align:center; gap:12px; padding:64px 24px; border:1px dashed var(--line); border-radius:var(--radius); background:var(--surface); }
+.empty-state svg{ width:44px; height:44px; color:var(--brand); }
+.empty-state h2{ font-size:1.1rem; }
+.empty-state p{ color:var(--ink-soft); font-size:.88rem; max-width:340px; margin:0; line-height:1.5; }
+.loading-state{ padding:60px 24px; text-align:center; color:var(--ink-soft); font-size:.9rem; }
+
+/* Toasts */
+.toast-stack{ position:fixed; bottom:18px; right:18px; display:flex; flex-direction:column; gap:8px; z-index:80; }
+.toast{ padding:10px 15px; border-radius:8px; background:var(--ink); color:var(--paper); font-size:.82rem; box-shadow:var(--shadow); max-width:300px; }
+.toast.error{ background:var(--danger); color:#fff; }
+.toast.ok{ background:var(--good); color:#fff; }
+
+@media print{
+  .no-print{ display:none !important; }
+  body{ background:#fff; color:#000; }
+}
